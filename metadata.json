@@ -1,0 +1,6 @@
+{
+  "name": "وِرد محاسبة",
+  "description": "تطبيق عربي لمتابعة العبادات والأذكار اليومية بجدول متجدد وعداد إلكتروني ومقترحات أذكار موثوقة.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

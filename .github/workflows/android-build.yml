@@ -1,0 +1,109 @@
+name: Android Release & Debug CI
+
+on:
+  push:
+    branches: [ "main", "master" ]
+  pull_request:
+    branches: [ "main", "master" ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Build Signed Release APK & AAB
+    # تثبيت بيئة التشغيل المستقرة ubuntu-24.04 لتجنب مشاكل Ubuntu 26 وإضافات Node 20 القديمة
+    runs-on: ubuntu-24.04
+
+    env:
+      GRADLE_VERSION: "9.3.1"
+      ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
+      ANDROID_HOME: /usr/local/lib/android/sdk
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 21 (setup-java@v5)
+        uses: actions/setup-java@v5
+        with:
+          distribution: 'temurin'
+          java-version: '21'
+
+      - name: Accept Android SDK 36 / 36.1 Licenses Automatically
+        run: |
+          mkdir -p "$ANDROID_SDK_ROOT/licenses"
+          printf "\n24333f8a63b6825ea9c5514f83c2829b004d1fee\nd56f5187479451eabf01fb78af6dfcb131a6481e\n8933bad161af4178b1185d1a37fbf41ea5269c55\n" > "$ANDROID_SDK_ROOT/licenses/android-sdk-license"
+          printf "\n84831b9409646a918e30573bab4c9c91346d8abd\n504667f4c0de7af1a06de9f4b1727b84351f2910\n" > "$ANDROID_SDK_ROOT/licenses/android-sdk-preview-license"
+          printf "\n33b6a2b64607f11b759f320ef9dff4ae5c47d97a\n" > "$ANDROID_SDK_ROOT/licenses/google-gdk-license"
+
+      - name: Install Gradle 9.3.1 Directly from Official Distribution
+        run: |
+          curl -fsSL "https://services.gradle.org/distributions/gradle-${GRADLE_VERSION}-bin.zip" -o /tmp/gradle.zip
+          sudo unzip -q -d /opt/gradle /tmp/gradle.zip
+          echo "/opt/gradle/gradle-${GRADLE_VERSION}/bin" >> "$GITHUB_PATH"
+          /opt/gradle/gradle-${GRADLE_VERSION}/bin/gradle --version
+
+      - name: Ensure debug.keystore Exists for Debug BuildType
+        run: |
+          if [ ! -f "debug.keystore" ]; then
+            keytool -genkeypair -v \
+              -keystore debug.keystore \
+              -storepass android \
+              -alias androiddebugkey \
+              -keypass android \
+              -keyalg RSA \
+              -keysize 2048 \
+              -validity 10000 \
+              -dname "CN=Android Debug,O=Android,C=US"
+          fi
+
+      - name: Decode & Verify Release Keystore from GitHub Secrets
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+          STORE_PASSWORD: ${{ secrets.STORE_PASSWORD }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: |
+          KEYSTORE_FILE="${GITHUB_WORKSPACE}/my-upload-key.jks"
+          if [ -n "${KEYSTORE_BASE64}" ]; then
+            echo "Decoding KEYSTORE_BASE64 from GitHub Secrets (sanitizing spaces/newlines)..."
+            printf '%s' "${KEYSTORE_BASE64}" | tr -d ' \t\r\n' | base64 --ignore-garbage -d > "${KEYSTORE_FILE}"
+            echo "Verifying keystore integrity with keytool..."
+            keytool -list -keystore "${KEYSTORE_FILE}" -storepass "${STORE_PASSWORD}" -alias upload
+            echo "KEYSTORE_PATH=${KEYSTORE_FILE}" >> "$GITHUB_ENV"
+            echo "STORE_PASSWORD=${STORE_PASSWORD}" >> "$GITHUB_ENV"
+            echo "KEY_PASSWORD=${KEY_PASSWORD}" >> "$GITHUB_ENV"
+            echo "HAS_RELEASE_KEYSTORE=true" >> "$GITHUB_ENV"
+          else
+            echo "HAS_RELEASE_KEYSTORE=false" >> "$GITHUB_ENV"
+          fi
+
+      - name: Build Android App (Release & Debug)
+        run: |
+          if [ "${HAS_RELEASE_KEYSTORE}" = "true" ]; then
+            gradle assembleDebug assembleRelease bundleRelease --no-daemon --stacktrace
+          else
+            echo "GitHub Signing Secrets not set yet; building Debug APK only..."
+            gradle assembleDebug --no-daemon --stacktrace
+          fi
+
+      - name: Upload Signed Release APK
+        if: env.HAS_RELEASE_KEYSTORE == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: wird-muhasaba-release-apk
+          path: app/build/outputs/apk/release/*.apk
+          if-no-files-found: warn
+
+      - name: Upload Signed Release AAB (Google Play Bundle)
+        if: env.HAS_RELEASE_KEYSTORE == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: wird-muhasaba-release-aab
+          path: app/build/outputs/bundle/release/*.aab
+          if-no-files-found: warn
+
+      - name: Upload Debug APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: wird-muhasaba-debug-apk
+          path: app/build/outputs/apk/debug/*.apk
+          if-no-files-found: warn

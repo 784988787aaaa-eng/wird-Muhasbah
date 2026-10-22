@@ -1,0 +1,29 @@
+<resources>
+    <string name="app_name">وِرد محاسبة</string>
+    <string name="emblem_wird">وِرد</string>
+    <string name="app_subtitle">متابعة يومية هادئة للعبادات والأذكار</string>
+    <string name="greeting_morning">صباح السكينة والبركة</string>
+    <string name="greeting_afternoon">طاب يومك بذكر الله</string>
+    <string name="greeting_evening">مساء الطمأنينة والقبول</string>
+    <string name="privacy_reassurance">سجلك محفوظ محلياً على جهازك بخصوصية تامة، والتسجيل وسيلة للتذكير الشخصي فقط.</string>
+    <string name="progress_card_title">متابعة وِرد اليوم</string>
+    <string name="progress_recorded_badge">تم التسجيل</string>
+    <string name="progress_not_recorded_badge">غير مسجّل بعد</string>
+    <string name="daily_schedule_title">جدول المحاسبة اليومي</string>
+    <string name="suggested_adhkar_title">أذكار مقترحة</string>
+    <string name="suggested_adhkar_more">اقتراحات أخرى</string>
+    <string name="open_counter_label">العداد الإلكتروني</string>
+    <string name="counter_title">العداد الإلكتروني</string>
+    <string name="counter_increment">تسبيح / زيادة (+١)</string>
+    <string name="counter_reset">تصفير</string>
+    <string name="counter_close">إغلاق</string>
+    <string name="counter_reset_confirm_title">تأكيد تصفير العداد</string>
+    <string name="counter_reset_confirm_message">هل ترغب في إعادة العدد الحالي إلى الصفر؟</string>
+    <string name="confirm_yes">نعم، تصفير</string>
+    <string name="confirm_cancel">إلغاء</string>
+    <string name="history_button_label">سجل الأيام</string>
+    <string name="customization_button_label">تخصيص الورد</string>
+    <string name="add_custom_deed_label">إضافة عمل شخصي</string>
+    <string name="onboarding_title">إعداد قالب وِردك اليومي</string>
+    <string name="onboarding_disclaimer">هذه المستويات تعبر عن عدد الأعمال في الجدول اليومي، ولا تعبر عن قيمة المستخدم أو صلاحه.</string>
+</resources>
