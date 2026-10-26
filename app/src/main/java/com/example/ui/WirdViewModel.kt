@@ -36,7 +36,7 @@ data class OverlayUiState(
     val isResetConfirmVisible: Boolean = false,
     val isCustomizationOpen: Boolean = false,
     val isHistoryOpen: Boolean = false,
-    val isFivePrayersExpanded: Boolean = false,
+    val isFivePrayersExpanded: Boolean = true,
     val selectedDhikr: SuggestedDhikr? = null,
     val adhkarSetIndex: Int = 0,
     val motivationIndex: Int = 0,
@@ -51,6 +51,7 @@ data class WirdUiState(
     val gregorianDateText: String = "",
     val hijriDateText: String? = null,
     val greetingText: String = "",
+    val currentHourOfDay: Int = 8,
     val settings: UserSettingsEntity = UserSettingsEntity(),
     val todaySummary: DailyDaySummary? = null,
     val templateItems: List<TemplateItemEntity> = emptyList(),
@@ -59,8 +60,8 @@ data class WirdUiState(
     val currentMotivation: MotivationalMessage = MotivationalMessage(
         id = "default",
         kind = MotivationKind.WELCOME_OPTIMISM,
-        title = "إشراقة وتفاؤل",
-        text = "القليل الدائم خير وأحب إلى الله.. لن تتعب ولن يأخذ من وقتك شيئاً!"
+        title = "سكينة اليوم",
+        text = "استراحة روح.. خطوة واحدة تُعيد لقلبك هدوءه."
     ),
     val overlay: OverlayUiState = OverlayUiState()
 ) {
@@ -105,11 +106,12 @@ class WirdViewModel(
         val resolvedSettings = settings ?: UserSettingsEntity()
         val ageEnum = runCatching { AgeGroup.valueOf(resolvedSettings.ageGroup) }.getOrDefault(AgeGroup.YOUNG_ADULTS)
         val genderEnum = runCatching { GenderGroup.valueOf(resolvedSettings.genderGroup) }.getOrDefault(GenderGroup.UNSPECIFIED)
+        val hour = clock.currentHourOfDay()
         val curatedMotivations = MotivationalLibrary.getCuratedMessages(
             ageGroup = ageEnum,
             genderGroup = genderEnum,
             todaySummary = todaySummary,
-            hourOfDay = clock.currentHourOfDay()
+            hourOfDay = hour
         )
         val activeMotivation = curatedMotivations[overlay.motivationIndex.mod(curatedMotivations.size)]
 
@@ -118,7 +120,8 @@ class WirdViewModel(
             todayDateKey = dateKey,
             gregorianDateText = ArabicDateUtils.formatGregorianArabic(localDate),
             hijriDateText = ArabicDateUtils.formatHijriArabic(localDate),
-            greetingText = ArabicDateUtils.greetingForHour(clock.currentHourOfDay()),
+            greetingText = ArabicDateUtils.greetingForHour(hour),
+            currentHourOfDay = hour,
             settings = resolvedSettings,
             todaySummary = todaySummary,
             templateItems = templates,
@@ -147,7 +150,6 @@ class WirdViewModel(
     fun onToggleDailyItem(item: DailyRecordItemEntity) {
         val now = clock.currentTimeMillis()
         val lastTap = lastTapTimeByItemId[item.id] ?: 0L
-        // Prevent accidental duplicate double-tap within 250ms
         if (now - lastTap < 250L && lastTap != 0L) return
         lastTapTimeByItemId[item.id] = now
 
@@ -166,14 +168,14 @@ class WirdViewModel(
                     it.copy(
                         celebrationBurstId = it.celebrationBurstId + 1,
                         celebrationText = praise,
-                        recentStatusBanner = praise
+                        recentStatusBanner = null
                     )
                 }
             } else {
                 overlayFlow.update {
                     it.copy(
                         celebrationText = null,
-                        recentStatusBanner = "تم إلغاء علامة «${item.title}» لتصحيح السجل"
+                        recentStatusBanner = null
                     )
                 }
             }
@@ -200,7 +202,7 @@ class WirdViewModel(
                         isFivePrayersExpanded = true,
                         celebrationBurstId = it.celebrationBurstId + 1,
                         celebrationText = praise,
-                        recentStatusBanner = praise
+                        recentStatusBanner = null
                     )
                 }
             } else {
@@ -208,7 +210,7 @@ class WirdViewModel(
                     it.copy(
                         isFivePrayersExpanded = true,
                         celebrationText = null,
-                        recentStatusBanner = "تم تصحيح سجل صلاة ${prayer.arabicName}"
+                        recentStatusBanner = null
                     )
                 }
             }
@@ -221,7 +223,7 @@ class WirdViewModel(
             repository.setAllFivePrayers(item, completed)
             if (completed) {
                 val praise = MotivationalLibrary.getCelebrationPraise(
-                    deedTitle = "الصلوات الخمس كاملة",
+                    deedTitle = "الصلوات الخمس",
                     genderGroup = currentState.genderGroupEnum,
                     ageGroup = currentState.ageGroupEnum
                 )
@@ -230,7 +232,7 @@ class WirdViewModel(
                         isFivePrayersExpanded = true,
                         celebrationBurstId = it.celebrationBurstId + 1,
                         celebrationText = praise,
-                        recentStatusBanner = praise
+                        recentStatusBanner = null
                     )
                 }
             } else {
@@ -238,7 +240,7 @@ class WirdViewModel(
                     it.copy(
                         isFivePrayersExpanded = true,
                         celebrationText = null,
-                        recentStatusBanner = "تمت إعادة ضبط جدول الصلوات الخمس لتصحيح السجل"
+                        recentStatusBanner = null
                     )
                 }
             }
@@ -293,6 +295,23 @@ class WirdViewModel(
         }
     }
 
+    fun cycleCounterDhikr() {
+        val presets = listOf(
+            "سبحان الله وبحمده",
+            "أستغفر الله وأتوب إليه",
+            "لا إله إلا الله",
+            "اللهم صلِّ وسلم على نبينا محمد",
+            "لا حول ولا قوة إلا بالله",
+            "ذكر مطلق"
+        )
+        val currentTitle = uiState.value.settings.activeDhikrTitle
+        val currentIdx = presets.indexOf(currentTitle)
+        val nextTitle = presets[(currentIdx + 1).mod(presets.size)]
+        viewModelScope.launch {
+            repository.selectDhikrForCounter(nextTitle)
+        }
+    }
+
     fun requestResetCounter() {
         overlayFlow.update { it.copy(isResetConfirmVisible = true) }
     }
@@ -342,10 +361,9 @@ class WirdViewModel(
                 intensity = intensity,
                 markOnboardingComplete = true
             )
+            // Zero-Clutter Policy: Never inject system diagnostic text into the top card
             overlayFlow.update {
-                it.copy(
-                    recentStatusBanner = "تكيّف المظهر والجدول مع (${genderGroup.arabicLabel} • ${ageGroup.arabicLabel})"
-                )
+                it.copy(recentStatusBanner = null)
             }
         }
     }
@@ -365,9 +383,6 @@ class WirdViewModel(
     fun addCustomDeed(title: String, subtitle: String) {
         viewModelScope.launch {
             repository.addCustomTemplateItem(title, subtitle)
-            overlayFlow.update {
-                it.copy(recentStatusBanner = "تمت إضافة «${title.trim()}» إلى جدولك")
-            }
         }
     }
 
@@ -380,6 +395,12 @@ class WirdViewModel(
     fun moveTemplateItem(item: TemplateItemEntity, moveUp: Boolean) {
         viewModelScope.launch {
             repository.moveTemplateItem(item, moveUp)
+        }
+    }
+
+    fun reorderTemplateItems(fromIndex: Int, toIndex: Int) {
+        viewModelScope.launch {
+            repository.reorderTemplateItems(fromIndex, toIndex)
         }
     }
 

@@ -21,18 +21,18 @@ private val EmeraldDarkScheme = darkColorScheme(
     onSecondary = GoldOnSecondaryDark,
     secondaryContainer = GoldContainerDark,
     onSecondaryContainer = GoldOnContainerDark,
-    tertiary = SageTertiaryDark,
-    onTertiary = SageOnTertiaryDark,
-    tertiaryContainer = SageContainerDark,
-    onTertiaryContainer = SageOnContainerDark,
-    background = NightBackgroundDark,
+    tertiary = SlateTertiaryDark,
+    onTertiary = SlateOnTertiaryDark,
+    tertiaryContainer = SlateContainerDark,
+    onTertiaryContainer = SlateOnTertiaryContainerDark,
+    background = DeepNightBackgroundDark,
     onBackground = NightOnBackgroundDark,
-    surface = NightSurfaceDark,
+    surface = DeepOliveSurfaceDark,
     onSurface = NightOnSurfaceDark,
-    surfaceVariant = NightSurfaceVariantDark,
-    onSurfaceVariant = NightOnSurfaceVariantDark,
-    outline = NightOutlineDark,
-    outlineVariant = NightOutlineVariantDark
+    surfaceVariant = DeepOliveVariantDark,
+    onSurfaceVariant = NightMutedTextDark,
+    outline = SubtleBorderDark,
+    outlineVariant = SubtleBorderDark
 )
 
 private val EmeraldLightScheme = lightColorScheme(
@@ -44,116 +44,56 @@ private val EmeraldLightScheme = lightColorScheme(
     onSecondary = GoldOnSecondaryLight,
     secondaryContainer = GoldContainerLight,
     onSecondaryContainer = GoldOnContainerLight,
-    tertiary = SageTertiaryLight,
-    onTertiary = SageOnTertiaryLight,
-    tertiaryContainer = SageContainerLight,
-    onTertiaryContainer = SageOnContainerLight,
-    background = IvoryBackgroundLight,
-    onBackground = IvoryOnBackgroundLight,
-    surface = IvorySurfaceLight,
-    onSurface = IvoryOnSurfaceLight,
-    surfaceVariant = IvorySurfaceVariantLight,
-    onSurfaceVariant = IvoryOnSurfaceVariantLight,
-    outline = IvoryOutlineLight,
-    outlineVariant = IvoryOutlineVariantLight
+    tertiary = SlateTertiaryLight,
+    onTertiary = SlateOnTertiaryLight,
+    tertiaryContainer = SlateContainerLight,
+    onTertiaryContainer = SlateOnTertiaryLightContainer,
+    background = OffWhiteBackgroundLight,
+    onBackground = SlateOnBackgroundLight,
+    surface = PureWhiteSurfaceLight,
+    onSurface = SlateOnSurfaceLight,
+    surfaceVariant = TileUncompletedLight,
+    onSurfaceVariant = SlateMutedTextLight,
+    outline = SubtleOutlineLight,
+    outlineVariant = SubtleOutlineVariantLight
 )
 
-private val RosePinkDarkScheme = darkColorScheme(
+private val RosePinkDarkScheme = EmeraldDarkScheme.copy(
     primary = RosePrimaryDark,
     onPrimary = RoseOnPrimaryDark,
     primaryContainer = RoseContainerDark,
     onPrimaryContainer = RoseOnContainerDark,
-    secondary = RoseGoldSecondaryDark,
-    onSecondary = RoseGoldOnSecondaryDark,
-    secondaryContainer = RoseGoldContainerDark,
-    onSecondaryContainer = RoseGoldOnContainerDark,
-    tertiary = LavenderTertiaryDark,
-    onTertiary = LavenderOnTertiaryDark,
-    tertiaryContainer = LavenderContainerDark,
-    onTertiaryContainer = LavenderOnContainerDark,
-    background = BlushBackgroundDark,
-    onBackground = BlushOnBackgroundDark,
-    surface = BlushSurfaceDark,
-    onSurface = BlushOnSurfaceDark,
-    surfaceVariant = BlushSurfaceVariantDark,
-    onSurfaceVariant = BlushOnSurfaceVariantDark,
-    outline = BlushOutlineDark,
-    outlineVariant = BlushOutlineVariantDark
+    surface = RoseSurfaceDark
 )
 
-private val RosePinkLightScheme = lightColorScheme(
+private val RosePinkLightScheme = EmeraldLightScheme.copy(
     primary = RosePrimaryLight,
     onPrimary = RoseOnPrimaryLight,
     primaryContainer = RoseContainerLight,
     onPrimaryContainer = RoseOnContainerLight,
-    secondary = RoseGoldSecondaryLight,
-    onSecondary = RoseGoldOnSecondaryLight,
-    secondaryContainer = RoseGoldContainerLight,
-    onSecondaryContainer = RoseGoldOnContainerLight,
-    tertiary = LavenderTertiaryLight,
-    onTertiary = LavenderOnTertiaryLight,
-    tertiaryContainer = LavenderContainerLight,
-    onTertiaryContainer = LavenderOnContainerLight,
-    background = BlushBackgroundLight,
-    onBackground = BlushOnBackgroundLight,
-    surface = BlushSurfaceLight,
-    onSurface = BlushOnSurfaceLight,
-    surfaceVariant = BlushSurfaceVariantLight,
-    onSurfaceVariant = BlushOnSurfaceVariantLight,
-    outline = BlushOutlineLight,
-    outlineVariant = BlushOutlineVariantLight
+    background = RoseBackgroundLight,
+    surfaceVariant = RoseSurfaceVariantLight
 )
 
-private val SkyTealDarkScheme = darkColorScheme(
+private val SkyTealDarkScheme = EmeraldDarkScheme.copy(
     primary = TealPrimaryDark,
     onPrimary = TealOnPrimaryDark,
     primaryContainer = TealContainerDark,
     onPrimaryContainer = TealOnContainerDark,
-    secondary = AmberSecondaryDark,
-    onSecondary = AmberOnSecondaryDark,
-    secondaryContainer = AmberContainerDark,
-    onSecondaryContainer = AmberOnContainerDark,
-    tertiary = MintTertiaryDark,
-    onTertiary = MintOnTertiaryDark,
-    tertiaryContainer = MintContainerDark,
-    onTertiaryContainer = MintOnContainerDark,
-    background = SkyBackgroundDark,
-    onBackground = SkyOnBackgroundDark,
-    surface = SkySurfaceDark,
-    onSurface = SkyOnSurfaceDark,
-    surfaceVariant = SkySurfaceVariantDark,
-    onSurfaceVariant = SkyOnSurfaceVariantDark,
-    outline = SkyOutlineDark,
-    outlineVariant = SkyOutlineVariantDark
+    surface = TealSurfaceDark
 )
 
-private val SkyTealLightScheme = lightColorScheme(
+private val SkyTealLightScheme = EmeraldLightScheme.copy(
     primary = TealPrimaryLight,
     onPrimary = TealOnPrimaryLight,
     primaryContainer = TealContainerLight,
-    onPrimaryContainer = TealOnContainerLight,
-    secondary = AmberSecondaryLight,
-    onSecondary = AmberOnSecondaryLight,
-    secondaryContainer = AmberContainerLight,
-    onSecondaryContainer = AmberOnContainerLight,
-    tertiary = MintTertiaryLight,
-    onTertiary = MintOnTertiaryLight,
-    tertiaryContainer = MintContainerLight,
-    onTertiaryContainer = MintOnContainerLight,
-    background = SkyBackgroundLight,
-    onBackground = SkyOnBackgroundLight,
-    surface = SkySurfaceLight,
-    onSurface = SkyOnSurfaceLight,
-    surfaceVariant = SkySurfaceVariantLight,
-    onSurfaceVariant = SkyOnSurfaceVariantLight,
-    outline = SkyOutlineLight,
-    outlineVariant = SkyOutlineVariantLight
+    onPrimaryContainer = TealOnContainerLight
 )
 
 enum class PersonaPaletteStyle(val arabicTitle: String) {
     ROSE_BLUSH("الوردي الزهري الهادئ"),
     SKY_TEAL("السماوي المشرق"),
-    ROYAL_EMERALD("الزمردي والذهبي")
+    ROYAL_EMERALD("الزمردي الملكي")
 }
 
 fun resolvePersonaPalette(

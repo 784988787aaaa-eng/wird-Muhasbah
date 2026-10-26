@@ -4,21 +4,27 @@ import android.Manifest
 import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
-import androidx.compose.animation.scaleIn
-import androidx.compose.animation.scaleOut
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -29,7 +35,9 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
@@ -44,10 +52,7 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Bedtime
 import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.DarkMode
-import androidx.compose.material.icons.filled.ExpandLess
-import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.Groups
 import androidx.compose.material.icons.filled.LightMode
@@ -62,19 +67,12 @@ import androidx.compose.material.icons.outlined.AutoAwesome
 import androidx.compose.material.icons.outlined.DarkMode
 import androidx.compose.material.icons.outlined.History
 import androidx.compose.material.icons.outlined.LightMode
-import androidx.compose.material.icons.outlined.Notifications
-import androidx.compose.material.icons.outlined.RadioButtonUnchecked
-import androidx.compose.material.icons.outlined.TouchApp
 import androidx.compose.material.icons.outlined.Tune
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.Checkbox
-import androidx.compose.material3.CheckboxDefaults
-import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.FilledTonalIconButton
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
@@ -83,25 +81,31 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.AgeGroup
@@ -114,7 +118,18 @@ import com.example.data.GenderGroup
 import com.example.data.MotivationalLibrary
 import com.example.data.MotivationalMessage
 import com.example.ui.theme.AmiriFontFamily
+import com.example.ui.theme.CompletedTileBgDark
+import com.example.ui.theme.CompletedTileBgLight
+import com.example.ui.theme.CompletedTileBorder
+import com.example.ui.theme.EmeraldBrightAccent
+import com.example.ui.theme.EmeraldPrimaryLight
+import com.example.ui.theme.SlateMutedTextDark
+import com.example.ui.theme.SlateMutedTextLight
+import com.example.ui.theme.UncompletedTileBgDark
+import com.example.ui.theme.UncompletedTileBgLight
+import kotlin.math.abs
 import kotlin.math.cos
+import kotlin.math.roundToInt
 import kotlin.math.sin
 
 @Composable
@@ -129,6 +144,7 @@ fun WirdHomeScreen(
     onOpenCounter: (String?) -> Unit,
     onCloseCounter: () -> Unit,
     onIncrementCounter: () -> Unit,
+    onCycleCounterDhikr: () -> Unit = {},
     onRequestResetCounter: () -> Unit,
     onConfirmResetCounter: () -> Unit,
     onCancelResetCounter: () -> Unit,
@@ -143,6 +159,7 @@ fun WirdHomeScreen(
     onDismissOnboarding: () -> Unit,
     onToggleTemplateItem: (com.example.data.TemplateItemEntity) -> Unit,
     onMoveTemplateItem: (com.example.data.TemplateItemEntity, Boolean) -> Unit,
+    onReorderTemplateItems: (Int, Int) -> Unit = { _, _ -> },
     onAddCustomDeed: (String, String) -> Unit,
     onDeleteCustomDeed: (com.example.data.TemplateItemEntity) -> Unit,
     onCycleDarkMode: () -> Unit,
@@ -150,6 +167,14 @@ fun WirdHomeScreen(
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
+    val haptic = LocalHapticFeedback.current
+    val systemDark = isSystemInDarkTheme()
+    val isDark = when (uiState.darkModeEnum) {
+        DarkModePreference.SYSTEM -> systemDark
+        DarkModePreference.DARK -> true
+        DarkModePreference.LIGHT -> false
+    }
+
     val notificationPermissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission()
     ) { _ ->
@@ -182,29 +207,11 @@ fun WirdHomeScreen(
         containerColor = MaterialTheme.colorScheme.background,
         floatingActionButton = {
             if (!uiState.overlay.isCounterOpen) {
-                ExtendedFloatingActionButton(
+                FloatingTasbihMiniFab(
+                    counterValue = uiState.settings.counterValue,
                     onClick = { onOpenCounter(null) },
-                    containerColor = MaterialTheme.colorScheme.primary,
-                    contentColor = MaterialTheme.colorScheme.onPrimary,
-                    modifier = Modifier
-                        .navigationBarsPadding()
-                        .testTag("open_counter_fab")
-                ) {
-                    Icon(
-                        imageVector = Icons.Outlined.TouchApp,
-                        contentDescription = "فتح العداد الإلكتروني"
-                    )
-                    Spacer(modifier = Modifier.width(6.dp))
-                    val countBadge = if (uiState.settings.counterValue > 0) {
-                        "العداد (${ArabicDateUtils.toArabicDigits(uiState.settings.counterValue)})"
-                    } else {
-                        "العداد الإلكتروني"
-                    }
-                    Text(
-                        text = countBadge,
-                        style = MaterialTheme.typography.labelLarge
-                    )
-                }
+                    modifier = Modifier.navigationBarsPadding()
+                )
             }
         }
     ) { innerPadding ->
@@ -223,16 +230,17 @@ fun WirdHomeScreen(
                     start = 14.dp,
                     end = 14.dp,
                     top = 8.dp,
-                    bottom = 104.dp
+                    bottom = 96.dp
                 ),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
+                verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                // 1. Sleek Compact Header + Persona Theme Switcher
+                // 1. Sleek Header + Persona Switcher + Compact Progress Bar
                 item {
                     CompactWirdHeader(
                         gregorianDateText = uiState.gregorianDateText,
                         hijriDateText = uiState.hijriDateText,
                         greetingText = uiState.greetingText,
+                        daySummary = uiState.todaySummary,
                         currentGender = uiState.genderGroupEnum,
                         currentAge = uiState.ageGroupEnum,
                         darkModePref = uiState.darkModeEnum,
@@ -245,20 +253,20 @@ fun WirdHomeScreen(
                     )
                 }
 
-                // 2. Sleek Compact Progress + Motivational & Flash Reminder Card
+                // 2. Directive [3]: Swipeable Glassmorphic Mindful Inspiration Card (<= 70.dp)
                 item {
-                    CompactProgressAndMotivationCard(
-                        daySummary = uiState.todaySummary,
+                    SwipeableMindfulInspirationCard(
                         motivation = uiState.currentMotivation,
-                        recentFeedback = uiState.overlay.recentStatusBanner,
-                        intensityLabel = uiState.intensityEnum.arabicLabel,
-                        ageLabel = uiState.ageGroupEnum.arabicLabel,
-                        onCycleMotivation = onCycleMotivation,
+                        isDark = isDark,
+                        onSwipeOrTapNext = {
+                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                            onCycleMotivation()
+                        },
                         onSendFlashNotification = triggerFlashNotification
                     )
                 }
 
-                // 3. Compact Daily Schedule Header
+                // 3. Daily Schedule Section Header (Zero-Clutter)
                 item {
                     Row(
                         modifier = Modifier
@@ -267,22 +275,12 @@ fun WirdHomeScreen(
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(6.dp)
-                        ) {
-                            Text(
-                                text = "سجلات وِرد اليوم",
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.onBackground
-                            )
-                            Text(
-                                text = "• نقرة واحدة للإنجاز أو التصحيح",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
+                        Text(
+                            text = "سجلات وِرد اليوم",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onBackground
+                        )
 
                         TextButton(
                             onClick = onOpenCustomization,
@@ -295,32 +293,43 @@ fun WirdHomeScreen(
                                 modifier = Modifier.size(15.dp)
                             )
                             Spacer(modifier = Modifier.width(3.dp))
-                            Text("تخصيص / إضافة", style = MaterialTheme.typography.labelMedium)
+                            Text("تخصيص", style = MaterialTheme.typography.labelMedium)
                         }
                     }
                 }
 
-                // 4. Interactive Daily Accountability Items (Compact spacing so all records fit easily)
+                // 4. Interactive Daily Items: Bento Prayer Bar + Zero-Clutter Whole-Row Clickable Deeds
                 val todayItems = uiState.todaySummary?.items.orEmpty()
+                val activePrayer = FivePrayer.activePrayerForHour(uiState.currentHourOfDay)
+
                 items(todayItems, key = { it.id }) { item ->
                     if (item.isFivePrayers) {
-                        FivePrayersExpandableCard(
+                        PrayersTable(
                             item = item,
-                            isExpanded = uiState.overlay.isFivePrayersExpanded,
-                            onToggleExpand = onToggleFivePrayersExpanded,
-                            onToggleAll = { onToggleDailyItem(item) },
-                            onToggleSinglePrayer = { prayer -> onToggleSinglePrayer(item, prayer) },
-                            onSetAllPrayers = { completed -> onSetAllFivePrayers(item, completed) }
+                            activePrayer = activePrayer,
+                            isDark = isDark,
+                            onToggleSinglePrayer = { prayer ->
+                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                onToggleSinglePrayer(item, prayer)
+                            },
+                            onSetAllPrayers = { completed ->
+                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                onSetAllFivePrayers(item, completed)
+                            }
                         )
                     } else {
                         DailyDeedRowCard(
                             item = item,
-                            onToggle = { onToggleDailyItem(item) }
+                            isDark = isDark,
+                            onToggle = {
+                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                onToggleDailyItem(item)
+                            }
                         )
                     }
                 }
 
-                // 5. Suggested Adhkar Section (3 static verified suggestions at a time)
+                // 5. Suggested Adhkar Section
                 item {
                     Spacer(modifier = Modifier.height(4.dp))
                     SuggestedAdhkarSection(
@@ -340,20 +349,18 @@ fun WirdHomeScreen(
                 )
             }
 
-            // Floating Electronic Counter Panel (bottom-aligned overlay without leaving Home Screen)
+            // Directive [4]: Half-Screen Bottom Sheet Modal with Circular Progress Ring
             ElectronicCounterPanel(
                 visible = uiState.overlay.isCounterOpen,
                 counterValue = uiState.settings.counterValue,
                 activeDhikrTitle = uiState.settings.activeDhikrTitle,
                 isResetConfirmVisible = uiState.overlay.isResetConfirmVisible,
                 onIncrement = onIncrementCounter,
+                onCycleDhikr = onCycleCounterDhikr,
                 onRequestReset = onRequestResetCounter,
                 onConfirmReset = onConfirmResetCounter,
                 onCancelReset = onCancelResetCounter,
-                onClose = onCloseCounter,
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .navigationBarsPadding()
+                onClose = onCloseCounter
             )
         }
     }
@@ -370,7 +377,7 @@ fun WirdHomeScreen(
         )
     }
 
-    // Customization Modal Dialog
+    // Customization Sheet Dialog
     if (uiState.overlay.isCustomizationOpen) {
         CustomizationSheetDialog(
             currentAge = uiState.ageGroupEnum,
@@ -382,13 +389,14 @@ fun WirdHomeScreen(
             onChangeDarkMode = onSetDarkMode,
             onToggleTemplateItem = onToggleTemplateItem,
             onMoveTemplateItem = onMoveTemplateItem,
+            onReorderTemplateItems = onReorderTemplateItems,
             onAddCustomDeed = onAddCustomDeed,
             onDeleteCustomDeed = onDeleteCustomDeed,
             onDismiss = onCloseCustomization
         )
     }
 
-    // History Records Modal Dialog
+    // History Records Sheet Dialog
     if (uiState.overlay.isHistoryOpen) {
         HistoryRecordsSheetDialog(
             historySummaries = uiState.historySummaries,
@@ -403,6 +411,7 @@ private fun CompactWirdHeader(
     gregorianDateText: String,
     hijriDateText: String?,
     greetingText: String,
+    daySummary: DailyDaySummary?,
     currentGender: GenderGroup,
     currentAge: AgeGroup,
     darkModePref: DarkModePreference,
@@ -411,18 +420,28 @@ private fun CompactWirdHeader(
     onOpenCustomization: () -> Unit,
     onCycleDarkMode: () -> Unit
 ) {
+    val completed = daySummary?.completedCount ?: 0
+    val total = daySummary?.totalCount ?: 0
+    val fraction = daySummary?.progressFraction ?: 0f
+    val percent = daySummary?.progressPercent ?: 0
+    val animatedProgress by animateFloatAsState(
+        targetValue = fraction,
+        animationSpec = spring(),
+        label = "daily_progress_anim"
+    )
+
     Column(
         modifier = Modifier
             .fillMaxWidth()
             .testTag("home_header_section"),
-        verticalArrangement = Arrangement.spacedBy(6.dp)
+        verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // Compact Emblem, App Title & Dates
+            // Emblem, App Title & Dates
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
@@ -548,562 +567,66 @@ private fun CompactWirdHeader(
             }
         }
 
-        // Sleek 1-Line Adaptive Persona & Color Theme Selector
-        Row(
+        // Sleek 1-Line Persona & Progress Strip (Zero-Clutter: no system banner text!)
+        Card(
             modifier = Modifier
                 .fillMaxWidth()
-                .testTag("persona_theme_selector_row"),
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
-            verticalAlignment = Alignment.CenterVertically
+                .testTag("daily_progress_card"),
+            shape = RoundedCornerShape(14.dp),
+            colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.surface
+            ),
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
         ) {
-            val isFemaleSelected = MotivationalLibrary.isFemale(currentGender)
-            val isBoySelected = currentGender == GenderGroup.BOYS
-            val isMaleSelected = !isFemaleSelected && !isBoySelected
-
-            FilterChip(
-                selected = isMaleSelected,
-                onClick = { onSelectPersona(GenderGroup.YOUNG_MEN, AgeGroup.YOUNG_ADULTS) },
-                label = { Text("شاب / رجل 🌿", style = MaterialTheme.typography.labelSmall) },
-                modifier = Modifier
-                    .height(28.dp)
-                    .testTag("persona_chip_male")
-            )
-
-            FilterChip(
-                selected = isFemaleSelected,
-                onClick = { onSelectPersona(GenderGroup.YOUNG_WOMEN, currentAge) },
-                label = { Text("فتاة / أنثى 🌸", style = MaterialTheme.typography.labelSmall) },
-                colors = FilterChipDefaults.filterChipColors(
-                    selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
-                    selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer
-                ),
-                modifier = Modifier
-                    .height(28.dp)
-                    .testTag("persona_chip_female")
-            )
-
-            FilterChip(
-                selected = isBoySelected,
-                onClick = { onSelectPersona(GenderGroup.BOYS, AgeGroup.YOUTH) },
-                label = { Text("فتى / ناشئ 🌊", style = MaterialTheme.typography.labelSmall) },
-                modifier = Modifier
-                    .height(28.dp)
-                    .testTag("persona_chip_boy")
-            )
-        }
-    }
-}
-
-@Composable
-private fun CompactProgressAndMotivationCard(
-    daySummary: DailyDaySummary?,
-    motivation: MotivationalMessage,
-    recentFeedback: String?,
-    intensityLabel: String,
-    ageLabel: String,
-    onCycleMotivation: () -> Unit,
-    onSendFlashNotification: () -> Unit
-) {
-    val completed = daySummary?.completedCount ?: 0
-    val total = daySummary?.totalCount ?: 0
-    val fraction = daySummary?.progressFraction ?: 0f
-    val percent = daySummary?.progressPercent ?: 0
-
-    val animatedProgress by animateFloatAsState(
-        targetValue = fraction,
-        animationSpec = spring(),
-        label = "daily_progress_anim"
-    )
-
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .testTag("daily_progress_card"),
-        shape = RoundedCornerShape(16.dp),
-        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.primaryContainer
-        ),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.3f))
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .background(
-                    Brush.linearGradient(
-                        colors = listOf(
-                            MaterialTheme.colorScheme.primaryContainer,
-                            MaterialTheme.colorScheme.surface.copy(alpha = 0.45f)
-                        )
-                    )
-                )
-                .padding(horizontal = 12.dp, vertical = 10.dp),
-            verticalArrangement = Arrangement.spacedBy(6.dp)
-        ) {
-            // Compact Top Row: Progress Summary + Percentage Pill
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    Text(
-                        text = "إنجاز اليوم: ${ArabicDateUtils.toArabicDigits(completed)}/${ArabicDateUtils.toArabicDigits(total)}",
-                        style = MaterialTheme.typography.titleSmall,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onPrimaryContainer,
-                        modifier = Modifier.testTag("progress_summary_text")
-                    )
-                    Text(
-                        text = "($intensityLabel • $ageLabel)",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.75f)
-                    )
-                }
-
-                Surface(
-                    color = MaterialTheme.colorScheme.secondaryContainer,
-                    shape = RoundedCornerShape(8.dp),
-                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.secondary.copy(alpha = 0.4f))
-                ) {
-                    Text(
-                        text = "${ArabicDateUtils.toArabicDigits(percent)}٪",
-                        style = MaterialTheme.typography.labelLarge,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onSecondaryContainer,
-                        modifier = Modifier
-                            .padding(horizontal = 8.dp, vertical = 2.dp)
-                            .testTag("progress_percent_text")
-                    )
-                }
-            }
-
-            LinearProgressIndicator(
-                progress = { animatedProgress },
+            Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(6.dp)
-                    .clip(RoundedCornerShape(4.dp))
-                    .testTag("daily_progress_bar"),
-                color = MaterialTheme.colorScheme.primary,
-                trackColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.65f)
-            )
-
-            // Integrated Motivational & Gentle Nudge Strip
-            Surface(
-                color = MaterialTheme.colorScheme.surface.copy(alpha = 0.85f),
-                shape = RoundedCornerShape(12.dp),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clickable { onCycleMotivation() }
-                    .testTag("motivational_card")
-            ) {
-                Column(
-                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
-                    verticalArrangement = Arrangement.spacedBy(4.dp)
-                ) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(6.dp)
-                        ) {
-                            Icon(
-                                imageVector = Icons.Outlined.AutoAwesome,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.secondary,
-                                modifier = Modifier.size(16.dp)
-                            )
-                            Text(
-                                text = motivation.title,
-                                style = MaterialTheme.typography.labelLarge,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.primary
-                            )
-                            Surface(
-                                color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.7f),
-                                shape = RoundedCornerShape(6.dp)
-                            ) {
-                                Text(
-                                    text = motivation.kind.arabicBadge,
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.onSecondaryContainer,
-                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 1.dp)
-                                )
-                            }
-                        }
-
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            IconButton(
-                                onClick = onSendFlashNotification,
-                                modifier = Modifier
-                                    .size(28.dp)
-                                    .testTag("send_flash_notification_button")
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.NotificationsActive,
-                                    contentDescription = "إرسال إشعار تذكير خاطف بالله",
-                                    tint = MaterialTheme.colorScheme.secondary,
-                                    modifier = Modifier.size(16.dp)
-                                )
-                            }
-                            TextButton(
-                                onClick = onCycleMotivation,
-                                contentPadding = PaddingValues(horizontal = 6.dp, vertical = 0.dp),
-                                modifier = Modifier
-                                    .height(26.dp)
-                                    .testTag("next_motivation_button")
-                            ) {
-                                Text("إلهام آخر ✨", style = MaterialTheme.typography.labelSmall)
-                            }
-                        }
-                    }
-
-                    Text(
-                        text = motivation.text,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurface,
-                        modifier = Modifier.testTag("motivation_body_text")
-                    )
-
-                    if (!recentFeedback.isNullOrBlank()) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(4.dp),
-                            modifier = Modifier.testTag("recent_feedback_banner")
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Check,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.size(14.dp)
-                            )
-                            Text(
-                                text = recentFeedback,
-                                style = MaterialTheme.typography.labelSmall,
-                                fontWeight = FontWeight.SemiBold,
-                                color = MaterialTheme.colorScheme.primary
-                            )
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun FivePrayersExpandableCard(
-    item: DailyRecordItemEntity,
-    isExpanded: Boolean,
-    onToggleExpand: () -> Unit,
-    onToggleAll: () -> Unit,
-    onToggleSinglePrayer: (FivePrayer) -> Unit,
-    onSetAllPrayers: (Boolean) -> Unit
-) {
-    val completedPrayers = item.completedPrayers
-    val completedCount = completedPrayers.size
-    val totalPrayers = FivePrayer.entries.size
-
-    val containerColor by animateColorAsState(
-        targetValue = if (item.isCompleted) {
-            MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.55f)
-        } else {
-            MaterialTheme.colorScheme.surface
-        },
-        label = "five_prayers_card_bg"
-    )
-
-    val borderColor by animateColorAsState(
-        targetValue = if (item.isCompleted || isExpanded) {
-            MaterialTheme.colorScheme.primary
-        } else {
-            MaterialTheme.colorScheme.outlineVariant
-        },
-        label = "five_prayers_card_border"
-    )
-
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(14.dp))
-            .clickable(onClick = onToggleExpand)
-            .semantics {
-                contentDescription = "الصلوات الخمس، مسجل $completedCount من $totalPrayers، اضغط لفتح جدول الصلوات الخمس وتصحيح السجل"
-            }
-            .testTag("checklist_item_${item.templateCode}"),
-        shape = RoundedCornerShape(14.dp),
-        colors = CardDefaults.cardColors(containerColor = containerColor),
-        border = BorderStroke(if (item.isCompleted || isExpanded) 1.5.dp else 1.dp, borderColor)
-    ) {
-        Column(modifier = Modifier.fillMaxWidth()) {
-            // Compact Main Card Row
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 12.dp, vertical = 9.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
+                    .padding(horizontal = 12.dp, vertical = 8.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp)
             ) {
                 Row(
-                    modifier = Modifier.weight(1f),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .size(36.dp)
-                            .clip(CircleShape)
-                            .background(
-                                if (item.isCompleted) {
-                                    MaterialTheme.colorScheme.primary
-                                } else {
-                                    MaterialTheme.colorScheme.surfaceVariant
-                                }
-                            ),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Mosque,
-                            contentDescription = null,
-                            tint = if (item.isCompleted) {
-                                MaterialTheme.colorScheme.onPrimary
-                            } else {
-                                MaterialTheme.colorScheme.primary
-                            },
-                            modifier = Modifier.size(19.dp)
-                        )
-                    }
-
-                    Column {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(4.dp)
-                        ) {
-                            Text(
-                                text = item.title,
-                                style = MaterialTheme.typography.titleSmall,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.onSurface
-                            )
-                            Icon(
-                                imageVector = if (isExpanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
-                                contentDescription = if (isExpanded) "إخفاء جدول الصلوات" else "عرض جدول الصلوات الخمس",
-                                tint = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.size(18.dp)
-                            )
-                        }
-                        val subSummary = if (completedCount == 0) {
-                            "اضغط لعرض جدول الصلوات: الفجر، الظهر، العصر، المغرب، العشاء"
-                        } else {
-                            "المسجّل: ${completedPrayers.joinToString("، ") { it.arabicName }}"
-                        }
-                        Text(
-                            text = subSummary,
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                    }
-                }
-
-                Spacer(modifier = Modifier.width(6.dp))
-
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(6.dp)
-                ) {
-                    Surface(
-                        color = if (item.isCompleted) {
-                            MaterialTheme.colorScheme.secondaryContainer
-                        } else if (completedCount > 0) {
-                            MaterialTheme.colorScheme.primaryContainer
-                        } else {
-                            MaterialTheme.colorScheme.surfaceVariant
-                        },
-                        shape = RoundedCornerShape(8.dp)
-                    ) {
-                        val badgeLabel = when {
-                            item.isCompleted -> "٥ / ٥ • تم التسجيل"
-                            completedCount > 0 -> "${ArabicDateUtils.toArabicDigits(completedCount)} من ٥ مسجّلة"
-                            else -> "جدول ٥ صلوات"
-                        }
-                        Text(
-                            text = badgeLabel,
-                            style = MaterialTheme.typography.labelSmall,
-                            color = if (item.isCompleted) {
-                                MaterialTheme.colorScheme.onSecondaryContainer
-                            } else if (completedCount > 0) {
-                                MaterialTheme.colorScheme.onPrimaryContainer
-                            } else {
-                                MaterialTheme.colorScheme.onSurfaceVariant
-                            },
-                            modifier = Modifier
-                                .padding(horizontal = 8.dp, vertical = 3.dp)
-                                .testTag("checklist_status_${item.templateCode}")
-                        )
-                    }
-
-                    Box(
-                        modifier = Modifier
-                            .size(40.dp)
-                            .clip(CircleShape)
-                            .clickable(
-                                role = Role.Checkbox,
-                                onClick = onToggleAll
-                            )
-                            .testTag("checklist_checkbox_${item.templateCode}"),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            imageVector = if (item.isCompleted) {
-                                Icons.Filled.CheckCircle
-                            } else {
-                                Icons.Outlined.RadioButtonUnchecked
-                            },
-                            contentDescription = if (item.isCompleted) {
-                                "إلغاء علامة الصلوات الخمس"
-                            } else {
-                                "تسجيل الصلوات الخمس كاملة"
-                            },
-                            tint = if (item.isCompleted) {
-                                MaterialTheme.colorScheme.primary
-                            } else {
-                                MaterialTheme.colorScheme.outline
-                            },
-                            modifier = Modifier.size(24.dp)
-                        )
-                    }
-                }
-            }
-
-            // Expandable PrayersTable Component
-            AnimatedVisibility(visible = isExpanded) {
-                PrayersTable(
-                    item = item,
-                    onToggleSinglePrayer = onToggleSinglePrayer,
-                    onSetAllPrayers = onSetAllPrayers
-                )
-            }
-        }
-    }
-}
-
-/**
- * Dedicated `PrayersTable` component displaying the 5 daily prayers
- * (الفجر، الظهر، العصر، المغرب، العشاء) in an organized list with Checkboxes
- * for recording completion and correcting each prayer individually.
- */
-@Composable
-fun PrayersTable(
-    item: DailyRecordItemEntity,
-    onToggleSinglePrayer: (FivePrayer) -> Unit,
-    onSetAllPrayers: (Boolean) -> Unit,
-    modifier: Modifier = Modifier
-) {
-    Column(
-        modifier = modifier
-            .fillMaxWidth()
-            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f))
-            .padding(horizontal = 12.dp, vertical = 10.dp)
-            .testTag("five_prayers_schedule_table"),
-        verticalArrangement = Arrangement.spacedBy(6.dp)
-    ) {
-        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(
-                text = "جدول الصلوات الخمس (تسجيل وتصحيح كل صلاة):",
-                style = MaterialTheme.typography.labelLarge,
-                color = MaterialTheme.colorScheme.primary
-            )
-
-            TextButton(
-                onClick = { onSetAllPrayers(!item.isCompleted) },
-                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp),
-                modifier = Modifier
-                    .height(28.dp)
-                    .testTag("five_prayers_toggle_all_button")
-            ) {
-                Text(
-                    text = if (item.isCompleted) "إلغاء تحديد الكل" else "تسجيل الخمس كاملة",
-                    style = MaterialTheme.typography.labelSmall
-                )
-            }
-        }
-
-        FivePrayer.entries.forEach { prayer ->
-            val isPrayerChecked = item.isPrayerCompleted(prayer)
-            val rowScale by animateFloatAsState(
-                targetValue = if (isPrayerChecked) 1.01f else 1.0f,
-                animationSpec = spring(),
-                label = "prayer_row_scale_${prayer.code}"
-            )
-
-            Surface(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .scale(rowScale)
-                    .clip(RoundedCornerShape(10.dp))
-                    .clickable(
-                        role = Role.Checkbox,
-                        onClick = { onToggleSinglePrayer(prayer) }
-                    )
-                    .testTag("prayer_row_${prayer.code}"),
-                shape = RoundedCornerShape(10.dp),
-                color = if (isPrayerChecked) {
-                    MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.8f)
-                } else {
-                    MaterialTheme.colorScheme.surface
-                },
-                border = BorderStroke(
-                    1.dp,
-                    if (isPrayerChecked) {
-                        MaterialTheme.colorScheme.primary
-                    } else {
-                        MaterialTheme.colorScheme.outlineVariant
-                    }
-                )
-            ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 10.dp, vertical = 6.dp),
+                    modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        modifier = Modifier.testTag("persona_theme_selector_row"),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Checkbox(
-                            checked = isPrayerChecked,
-                            onCheckedChange = { onToggleSinglePrayer(prayer) },
-                            colors = CheckboxDefaults.colors(
-                                checkedColor = MaterialTheme.colorScheme.primary,
-                                checkmarkColor = MaterialTheme.colorScheme.onPrimary
-                            ),
+                        val isFemaleSelected = MotivationalLibrary.isFemale(currentGender)
+                        val isBoySelected = currentGender == GenderGroup.BOYS
+                        val isMaleSelected = !isFemaleSelected && !isBoySelected
+
+                        FilterChip(
+                            selected = isMaleSelected,
+                            onClick = { onSelectPersona(GenderGroup.YOUNG_MEN, AgeGroup.YOUNG_ADULTS) },
+                            label = { Text("شاب / رجل", style = MaterialTheme.typography.labelSmall) },
                             modifier = Modifier
-                                .size(24.dp)
-                                .testTag("prayer_checkbox_${prayer.code}")
+                                .height(26.dp)
+                                .testTag("persona_chip_male")
                         )
 
-                        Text(
-                            text = "صلاة ${prayer.arabicName}",
-                            style = MaterialTheme.typography.titleSmall,
-                            fontWeight = if (isPrayerChecked) FontWeight.Bold else FontWeight.Medium,
-                            color = MaterialTheme.colorScheme.onSurface
+                        FilterChip(
+                            selected = isFemaleSelected,
+                            onClick = { onSelectPersona(GenderGroup.YOUNG_WOMEN, currentAge) },
+                            label = { Text("فتاة / أنثى", style = MaterialTheme.typography.labelSmall) },
+                            colors = FilterChipDefaults.filterChipColors(
+                                selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
+                                selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer
+                            ),
+                            modifier = Modifier
+                                .height(26.dp)
+                                .testTag("persona_chip_female")
+                        )
+
+                        FilterChip(
+                            selected = isBoySelected,
+                            onClick = { onSelectPersona(GenderGroup.BOYS, AgeGroup.YOUTH) },
+                            label = { Text("فتى / ناشئ", style = MaterialTheme.typography.labelSmall) },
+                            modifier = Modifier
+                                .height(26.dp)
+                                .testTag("persona_chip_boy")
                         )
                     }
 
@@ -1111,26 +634,350 @@ fun PrayersTable(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
-                        Surface(
-                            color = if (isPrayerChecked) {
-                                MaterialTheme.colorScheme.secondaryContainer
-                            } else {
-                                MaterialTheme.colorScheme.surfaceVariant
-                            },
-                            shape = RoundedCornerShape(6.dp)
-                        ) {
-                            Text(
-                                text = if (isPrayerChecked) "تم التسجيل ✨" else "اضغط للتسجيل / التصحيح",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = if (isPrayerChecked) {
-                                    MaterialTheme.colorScheme.onSecondaryContainer
-                                } else {
-                                    MaterialTheme.colorScheme.onSurfaceVariant
-                                },
-                                modifier = Modifier
-                                    .padding(horizontal = 8.dp, vertical = 2.dp)
-                                    .testTag("prayer_status_${prayer.code}")
+                        Text(
+                            text = "${ArabicDateUtils.toArabicDigits(completed)}/${ArabicDateUtils.toArabicDigits(total)}",
+                            style = MaterialTheme.typography.labelLarge,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.testTag("progress_summary_text")
+                        )
+                        Text(
+                            text = "${ArabicDateUtils.toArabicDigits(percent)}٪",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.testTag("progress_percent_text")
+                        )
+                    }
+                }
+
+                LinearProgressIndicator(
+                    progress = { animatedProgress },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(5.dp)
+                        .clip(RoundedCornerShape(4.dp))
+                        .testTag("daily_progress_bar"),
+                    color = MaterialTheme.colorScheme.primary,
+                    trackColor = MaterialTheme.colorScheme.surfaceVariant
+                )
+            }
+        }
+    }
+}
+
+/**
+ * Directive [3]: Mindful UX Copy Card — Translucent white glassmorphic card (<= 70.dp height)
+ * with horizontal swipe gesture to cycle/dismiss smoothly.
+ */
+@Composable
+private fun SwipeableMindfulInspirationCard(
+    motivation: MotivationalMessage,
+    isDark: Boolean,
+    onSwipeOrTapNext: () -> Unit,
+    onSendFlashNotification: () -> Unit
+) {
+    var dragOffsetX by remember { mutableFloatStateOf(0f) }
+    val glassBg = if (isDark) {
+        MaterialTheme.colorScheme.surface.copy(alpha = 0.88f)
+    } else {
+        Color.White.copy(alpha = 0.90f)
+    }
+
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .heightIn(max = 68.dp)
+            .offset { IntOffset(dragOffsetX.roundToInt(), 0) }
+            .pointerInput(motivation.id) {
+                detectHorizontalDragGestures(
+                    onDragEnd = {
+                        if (abs(dragOffsetX) > 48f) {
+                            onSwipeOrTapNext()
+                        }
+                        dragOffsetX = 0f
+                    },
+                    onDragCancel = { dragOffsetX = 0f },
+                    onHorizontalDrag = { change, dragAmount ->
+                        change.consume()
+                        dragOffsetX = (dragOffsetX + dragAmount).coerceIn(-140f, 140f)
+                    }
+                )
+            }
+            .clip(RoundedCornerShape(14.dp))
+            .clickable { onSwipeOrTapNext() }
+            .testTag("motivational_card"),
+        shape = RoundedCornerShape(14.dp),
+        color = glassBg,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 12.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Row(
+                modifier = Modifier.weight(1f),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Outlined.AutoAwesome,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.secondary,
+                    modifier = Modifier.size(18.dp)
+                )
+
+                AnimatedContent(
+                    targetState = motivation.text,
+                    transitionSpec = { fadeIn(tween(220)) togetherWith fadeOut(tween(180)) },
+                    label = "mindful_copy_anim"
+                ) { text ->
+                    Text(
+                        text = text,
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.Medium,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.testTag("motivation_body_text")
+                    )
+                }
+            }
+
+            IconButton(
+                onClick = onSendFlashNotification,
+                modifier = Modifier
+                    .size(32.dp)
+                    .testTag("send_flash_notification_button")
+            ) {
+                Icon(
+                    imageVector = Icons.Default.NotificationsActive,
+                    contentDescription = "إرسال إشعار تذكير خاطف",
+                    tint = MaterialTheme.colorScheme.secondary,
+                    modifier = Modifier.size(16.dp)
+                )
+            }
+        }
+    }
+}
+
+/**
+ * Directive [2]: Horizontal Bento Prayer Bar (`PrayersTable`)
+ * - Total height <= 90.dp
+ * - Top header: "صلوات اليوم" on the right, "[ X / 5 ]" on the left
+ * - 5 equal horizontal tiles in one row: [ فجر ] [ ظهر ] [ عصر ] [ مغرب ] [ عشاء ]
+ * - Breathing Dot above the current active prayer
+ * - Single tap on any tile toggles completion immediately with haptic feedback
+ */
+@Composable
+fun PrayersTable(
+    item: DailyRecordItemEntity,
+    activePrayer: FivePrayer,
+    isDark: Boolean,
+    onToggleSinglePrayer: (FivePrayer) -> Unit,
+    onSetAllPrayers: (Boolean) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val completedCount = item.completedPrayersCount
+    val infiniteTransition = rememberInfiniteTransition(label = "breathing_dot_transition")
+    val breathingAlpha by infiniteTransition.animateFloat(
+        initialValue = 0.35f,
+        targetValue = 1.0f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 1200, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "breathing_dot_alpha"
+    )
+    val breathingScale by infiniteTransition.animateFloat(
+        initialValue = 0.85f,
+        targetValue = 1.25f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 1200, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "breathing_dot_scale"
+    )
+
+    Card(
+        modifier = modifier
+            .fillMaxWidth()
+            .heightIn(max = 90.dp)
+            .testTag("checklist_item_${item.templateCode}"),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surface
+        ),
+        border = BorderStroke(
+            1.dp,
+            if (item.isCompleted) CompletedTileBorder else MaterialTheme.colorScheme.outlineVariant
+        )
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 12.dp, vertical = 8.dp)
+                .testTag("five_prayers_schedule_table"),
+            verticalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            // Top Row: "صلوات اليوم" + "[ X / 5 ]"
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Mosque,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Text(
+                        text = "صلوات اليوم",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                }
+
+                Surface(
+                    shape = RoundedCornerShape(8.dp),
+                    color = if (item.isCompleted) {
+                        if (isDark) CompletedTileBgDark else CompletedTileBgLight
+                    } else {
+                        MaterialTheme.colorScheme.surfaceVariant
+                    },
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(8.dp))
+                        .clickable { onSetAllPrayers(!item.isCompleted) }
+                        .testTag("five_prayers_toggle_all_button")
+                ) {
+                    Text(
+                        text = "[ ${ArabicDateUtils.toArabicDigits(completedCount)} / ٥ ]",
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = if (item.isCompleted) {
+                            MaterialTheme.colorScheme.primary
+                        } else {
+                            MaterialTheme.colorScheme.onSurfaceVariant
+                        },
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
+                    )
+                }
+            }
+
+            // 5 Equal Horizontal Bento Tiles: [ فجر ] [ ظهر ] [ عصر ] [ مغرب ] [ عشاء ]
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                FivePrayer.entries.forEach { prayer ->
+                    val isCompleted = item.isPrayerCompleted(prayer)
+                    val isActiveNow = prayer == activePrayer
+
+                    val tileBg by animateColorAsState(
+                        targetValue = when {
+                            isCompleted && isDark -> CompletedTileBgDark
+                            isCompleted && !isDark -> CompletedTileBgLight
+                            !isCompleted && isDark -> UncompletedTileBgDark
+                            else -> UncompletedTileBgLight
+                        },
+                        label = "bento_tile_bg_${prayer.code}"
+                    )
+
+                    val tileTextColor by animateColorAsState(
+                        targetValue = when {
+                            isCompleted && isDark -> Color(0xFFA7F3D0)
+                            isCompleted && !isDark -> EmeraldPrimaryLight
+                            isDark -> SlateMutedTextDark
+                            else -> SlateMutedTextLight
+                        },
+                        label = "bento_tile_text_${prayer.code}"
+                    )
+
+                    val tileScale by animateFloatAsState(
+                        targetValue = if (isCompleted) 1.02f else 1.0f,
+                        animationSpec = spring(),
+                        label = "bento_tile_scale_${prayer.code}"
+                    )
+
+                    Surface(
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(44.dp)
+                            .scale(tileScale)
+                            .clip(RoundedCornerShape(10.dp))
+                            .clickable(
+                                role = Role.Checkbox,
+                                onClick = { onToggleSinglePrayer(prayer) }
                             )
+                            .semantics {
+                                contentDescription = "صلاة ${prayer.arabicName}"
+                            }
+                            .testTag("prayer_row_${prayer.code}"),
+                        shape = RoundedCornerShape(10.dp),
+                        color = tileBg,
+                        border = BorderStroke(
+                            width = if (isCompleted || isActiveNow) 1.dp else 0.5.dp,
+                            color = when {
+                                isCompleted -> CompletedTileBorder
+                                isActiveNow -> MaterialTheme.colorScheme.secondary.copy(alpha = 0.65f)
+                                else -> Color.Transparent
+                            }
+                        )
+                    ) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .padding(horizontal = 2.dp, vertical = 3.dp)
+                                .testTag("prayer_checkbox_${prayer.code}"),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.Center
+                        ) {
+                            // Breathing dot for current active prayer or subtle spacer
+                            if (isActiveNow) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(5.dp)
+                                        .scale(breathingScale)
+                                        .clip(CircleShape)
+                                        .background(
+                                            if (isCompleted) EmeraldBrightAccent.copy(alpha = breathingAlpha)
+                                            else MaterialTheme.colorScheme.secondary.copy(alpha = breathingAlpha)
+                                        )
+                                        .testTag("breathing_dot_${prayer.code}")
+                                )
+                                Spacer(modifier = Modifier.height(2.dp))
+                            }
+
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(2.dp)
+                            ) {
+                                Text(
+                                    text = prayer.shortTileLabel,
+                                    style = MaterialTheme.typography.labelMedium,
+                                    fontWeight = if (isCompleted || isActiveNow) FontWeight.Bold else FontWeight.Medium,
+                                    color = tileTextColor,
+                                    maxLines = 1
+                                )
+                                if (isCompleted) {
+                                    Text(
+                                        text = "✓",
+                                        style = MaterialTheme.typography.labelSmall.copy(
+                                            fontWeight = FontWeight.Bold
+                                        ),
+                                        color = if (isDark) EmeraldBrightAccent else EmeraldPrimaryLight
+                                    )
+                                }
+                            }
                         }
                     }
                 }
@@ -1139,14 +986,21 @@ fun PrayersTable(
     }
 }
 
+/**
+ * Directive [1]: Zero-Clutter Deed Row
+ * - Whole Row is Clickable
+ * - No "غير مسجل" text badge
+ * - Soft hollow gray circle when uncompleted -> glowing Emerald Green circle with white (✓) when completed
+ */
 @Composable
 private fun DailyDeedRowCard(
     item: DailyRecordItemEntity,
+    isDark: Boolean,
     onToggle: () -> Unit
 ) {
     val containerColor by animateColorAsState(
         targetValue = if (item.isCompleted) {
-            MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.55f)
+            if (isDark) CompletedTileBgDark.copy(alpha = 0.45f) else CompletedTileBgLight.copy(alpha = 0.65f)
         } else {
             MaterialTheme.colorScheme.surface
         },
@@ -1155,51 +1009,46 @@ private fun DailyDeedRowCard(
 
     val borderColor by animateColorAsState(
         targetValue = if (item.isCompleted) {
-            MaterialTheme.colorScheme.primary
+            CompletedTileBorder
         } else {
             MaterialTheme.colorScheme.outlineVariant
         },
         label = "deed_card_border"
     )
 
-    val cardScale by animateFloatAsState(
-        targetValue = if (item.isCompleted) 1.01f else 1.0f,
+    val indicatorScale by animateFloatAsState(
+        targetValue = if (item.isCompleted) 1.08f else 1.0f,
         animationSpec = spring(),
-        label = "deed_card_scale"
+        label = "deed_indicator_scale"
     )
 
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .scale(cardScale)
             .clip(RoundedCornerShape(14.dp))
             .clickable(
                 role = Role.Checkbox,
                 onClick = onToggle
             )
             .semantics {
-                contentDescription = if (item.isCompleted) {
-                    "${item.title}، تم التسجيل"
-                } else {
-                    "${item.title}، غير مسجل بعد"
-                }
+                contentDescription = item.title
             }
             .testTag("checklist_item_${item.templateCode}"),
         shape = RoundedCornerShape(14.dp),
         colors = CardDefaults.cardColors(containerColor = containerColor),
-        border = BorderStroke(if (item.isCompleted) 1.5.dp else 1.dp, borderColor)
+        border = BorderStroke(if (item.isCompleted) 1.2.dp else 1.dp, borderColor)
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 12.dp, vertical = 9.dp),
+                .padding(horizontal = 14.dp, vertical = 11.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
             Row(
                 modifier = Modifier.weight(1f),
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(10.dp)
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 Box(
                     modifier = Modifier
@@ -1207,7 +1056,7 @@ private fun DailyDeedRowCard(
                         .clip(CircleShape)
                         .background(
                             if (item.isCompleted) {
-                                MaterialTheme.colorScheme.primary
+                                MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)
                             } else {
                                 MaterialTheme.colorScheme.surfaceVariant
                             }
@@ -1218,11 +1067,11 @@ private fun DailyDeedRowCard(
                         imageVector = iconForDeedKey(item.iconKey),
                         contentDescription = null,
                         tint = if (item.isCompleted) {
-                            MaterialTheme.colorScheme.onPrimary
-                        } else {
                             MaterialTheme.colorScheme.primary
+                        } else {
+                            MaterialTheme.colorScheme.onSurfaceVariant
                         },
-                        modifier = Modifier.size(19.dp)
+                        modifier = Modifier.size(18.dp)
                     )
                 }
 
@@ -1243,57 +1092,38 @@ private fun DailyDeedRowCard(
                 }
             }
 
-            Spacer(modifier = Modifier.width(6.dp))
+            Spacer(modifier = Modifier.width(10.dp))
 
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(6.dp)
-            ) {
-                Surface(
-                    color = if (item.isCompleted) {
-                        MaterialTheme.colorScheme.secondaryContainer
-                    } else {
-                        MaterialTheme.colorScheme.surfaceVariant
-                    },
-                    shape = RoundedCornerShape(8.dp)
-                ) {
-                    Text(
-                        text = if (item.isCompleted) "تم التسجيل ✨" else "غير مسجّل",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = if (item.isCompleted) {
-                            MaterialTheme.colorScheme.onSecondaryContainer
+            // Soft Hollow Gray Circle -> Glowing Emerald Circle with White Checkmark (✓)
+            Box(
+                modifier = Modifier
+                    .size(28.dp)
+                    .scale(indicatorScale)
+                    .then(
+                        if (item.isCompleted) {
+                            Modifier
+                                .shadow(elevation = 4.dp, shape = CircleShape, spotColor = EmeraldBrightAccent)
+                                .clip(CircleShape)
+                                .background(EmeraldBrightAccent)
                         } else {
-                            MaterialTheme.colorScheme.onSurfaceVariant
-                        },
-                        modifier = Modifier
-                            .padding(horizontal = 8.dp, vertical = 3.dp)
-                            .testTag("checklist_status_${item.templateCode}")
+                            Modifier
+                                .clip(CircleShape)
+                                .border(
+                                    width = 1.8.dp,
+                                    color = if (isDark) Color(0xFF475569) else Color(0xFFCBD5E1),
+                                    shape = CircleShape
+                                )
+                        }
                     )
-                }
-
-                Box(
-                    modifier = Modifier
-                        .size(40.dp)
-                        .testTag("checklist_checkbox_${item.templateCode}"),
-                    contentAlignment = Alignment.Center
-                ) {
+                    .testTag("checklist_checkbox_${item.templateCode}"),
+                contentAlignment = Alignment.Center
+            ) {
+                if (item.isCompleted) {
                     Icon(
-                        imageVector = if (item.isCompleted) {
-                            Icons.Filled.CheckCircle
-                        } else {
-                            Icons.Outlined.RadioButtonUnchecked
-                        },
-                        contentDescription = if (item.isCompleted) {
-                            "إلغاء علامة ${item.title}"
-                        } else {
-                            "تسجيل إنجاز ${item.title}"
-                        },
-                        tint = if (item.isCompleted) {
-                            MaterialTheme.colorScheme.primary
-                        } else {
-                            MaterialTheme.colorScheme.outline
-                        },
-                        modifier = Modifier.size(24.dp)
+                        imageVector = Icons.Default.Check,
+                        contentDescription = null,
+                        tint = Color.White,
+                        modifier = Modifier.size(16.dp)
                     )
                 }
             }

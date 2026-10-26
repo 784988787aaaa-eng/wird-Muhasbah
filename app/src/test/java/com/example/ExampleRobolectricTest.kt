@@ -390,7 +390,7 @@ class ExampleRobolectricTest {
             com.example.ui.theme.resolvePersonaPalette(GenderGroup.MEN, AgeGroup.ADULTS)
         )
 
-        // Verify motivational messages adapt to gender and uncompleted Asr prayer at 16:00
+        // Verify Mindful UX Copy motivational messages adapt serenely without preachy copy
         val todayKey = repository.ensureInitializedAndSyncToday()
         val summary = repository.observeDaySummary(todayKey).first()!!
 
@@ -401,18 +401,18 @@ class ExampleRobolectricTest {
             hourOfDay = 16
         )
         assertTrue(femaleMessages.isNotEmpty())
-        assertTrue(femaleMessages.any { it.text.contains("العصر") })
-        assertTrue(femaleMessages.any { it.text.contains("لا تملّي مني") })
+        assertTrue(femaleMessages.any { it.text.contains("استراحة روح") })
+        assertTrue(femaleMessages.any { it.text.contains("طوبى لمن جعل ليله ونهاره عامراً بذكر ربه") })
+        assertTrue(femaleMessages.any { it.text.contains("ما زال في اليوم فسحة، ركعتان تسترد بهما سكينة قلبك") })
 
-        val maleMessages = com.example.data.MotivationalLibrary.getCuratedMessages(
-            ageGroup = AgeGroup.YOUNG_ADULTS,
-            genderGroup = GenderGroup.YOUNG_MEN,
-            todaySummary = summary,
-            hourOfDay = 16
-        )
-        assertTrue(maleMessages.isNotEmpty())
-        assertTrue(maleMessages.any { it.text.contains("العصر") })
-        assertTrue(maleMessages.any { it.text.contains("لا تملّ مني") })
+        // Verify template Drag & Drop reordering
+        val beforeReorder = repository.templateItemsFlow.first()
+        val firstCode = beforeReorder[0].code
+        val secondCode = beforeReorder[1].code
+        repository.reorderTemplateItems(0, 1)
+        val afterReorder = repository.templateItemsFlow.first()
+        assertEquals(secondCode, afterReorder[0].code)
+        assertEquals(firstCode, afterReorder[1].code)
         Unit
     }
 }

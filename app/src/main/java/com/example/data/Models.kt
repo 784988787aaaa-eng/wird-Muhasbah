@@ -22,9 +22,9 @@ enum class GenderGroup(val arabicLabel: String) {
 }
 
 enum class WirdIntensity(val arabicLabel: String, val badgeText: String, val description: String) {
-    LIGHT("ورد خفيف", "٥ أعمال", "يركز على أمهات الأعمال اليومية بيسر وسهولة"),
+    LIGHT("ورد مبسط", "٥ أعمال", "يركز على أمهات الأعمال اليومية بيسر وسهولة"),
     BALANCED("ورد متوازن", "٨ أعمال", "توازن يومي بين الفرائض والأذكار والنوافل القريبة"),
-    EXPANDED("ورد موسع", "١١ عملاً", "يشمل النوافل الإضافية وقيام الليل وأعمال البر اليومية")
+    EXPANDED("ورد مركز", "١١ عملاً", "يشمل النوافل الإضافية وقيام الليل وأعمال البر اليومية")
 }
 
 enum class DarkModePreference(val arabicLabel: String) {
@@ -42,7 +42,7 @@ data class UserSettingsEntity(
     val intensityLevel: String = WirdIntensity.BALANCED.name,
     val darkModePref: String = DarkModePreference.SYSTEM.name,
     val counterValue: Int = 0,
-    val activeDhikrTitle: String = "ذكر مطلق",
+    val activeDhikrTitle: String = "سُبْحَانَ اللَّهِ وَبِحَمْدِهِ",
     val reminderEnabled: Boolean = false,
     val reminderTime: String = "20:00",
     val lastActiveDateKey: String = ""
@@ -72,12 +72,24 @@ data class DailyRecordEntity(
     val templateSummary: String
 )
 
-enum class FivePrayer(val code: String, val arabicName: String) {
-    FAJR("FAJR", "الفجر"),
-    DHUHR("DHUHR", "الظهر"),
-    ASR("ASR", "العصر"),
-    MAGHRIB("MAGHRIB", "المغرب"),
-    ISHA("ISHA", "العشاء")
+enum class FivePrayer(val code: String, val arabicName: String, val shortTileLabel: String) {
+    FAJR("FAJR", "الفجر", "فجر"),
+    DHUHR("DHUHR", "الظهر", "ظهر"),
+    ASR("ASR", "العصر", "عصر"),
+    MAGHRIB("MAGHRIB", "المغرب", "مغرب"),
+    ISHA("ISHA", "العشاء", "عشاء");
+
+    companion object {
+        fun activePrayerForHour(hourOfDay: Int): FivePrayer {
+            return when (hourOfDay) {
+                in 4..10 -> FAJR
+                in 11..14 -> DHUHR
+                in 15..16 -> ASR
+                in 17..18 -> MAGHRIB
+                else -> ISHA
+            }
+        }
+    }
 }
 
 @Entity(

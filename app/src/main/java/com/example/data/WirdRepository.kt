@@ -317,14 +317,18 @@ class WirdRepository(
         if (index == -1) return
         val targetIndex = if (moveUp) index - 1 else index + 1
         if (targetIndex !in items.indices) return
+        reorderTemplateItems(index, targetIndex)
+    }
 
-        val neighbor = items[targetIndex]
-        val itemOrder = item.sortOrder
-        val neighborOrder = neighbor.sortOrder
-        val updatedItem = item.copy(sortOrder = if (itemOrder == neighborOrder) targetIndex + 1 else neighborOrder)
-        val updatedNeighbor = neighbor.copy(sortOrder = if (itemOrder == neighborOrder) index + 1 else itemOrder)
-
-        dao.updateTemplateItems(listOf(updatedItem, updatedNeighbor))
+    suspend fun reorderTemplateItems(fromIndex: Int, toIndex: Int) {
+        val items = dao.getTemplateItemsOnce().sortedBy { it.sortOrder }.toMutableList()
+        if (fromIndex !in items.indices || toIndex !in items.indices || fromIndex == toIndex) return
+        val moved = items.removeAt(fromIndex)
+        items.add(toIndex, moved)
+        val reindexed = items.mapIndexed { idx, entity ->
+            entity.copy(sortOrder = idx + 1)
+        }
+        dao.updateTemplateItems(reindexed)
         syncTodayWithUpdatedTemplate(currentDateKey())
     }
 
