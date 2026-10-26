@@ -1,29 +1,14 @@
-package com.example.data
+package com.example.core.common
 
 import java.time.LocalDate
-import java.time.LocalTime
-import java.time.ZoneId
 import java.time.chrono.HijrahChronology
 import java.time.chrono.HijrahDate
 import java.time.format.DateTimeFormatter
 import java.time.temporal.ChronoField
+import java.time.temporal.ChronoUnit
 import kotlin.math.floor
 
-interface ClockProvider {
-    fun currentLocalDate(): LocalDate
-    fun currentTimeMillis(): Long
-    fun currentZoneId(): ZoneId
-    fun currentHourOfDay(): Int
-}
-
-object SystemClockProvider : ClockProvider {
-    override fun currentLocalDate(): LocalDate = LocalDate.now()
-    override fun currentTimeMillis(): Long = System.currentTimeMillis()
-    override fun currentZoneId(): ZoneId = ZoneId.systemDefault()
-    override fun currentHourOfDay(): Int = LocalTime.now().hour
-}
-
-object ArabicDateUtils {
+object ArabicDateFormatter {
 
     private val hijriMonths = arrayOf(
         "محرّم",
@@ -65,48 +50,76 @@ object ArabicDateUtils {
         7 to "الأحد"
     )
 
-    fun toDateKey(date: LocalDate): String {
-        return date.format(DateTimeFormatter.ISO_LOCAL_DATE)
-    }
+    private val shortArabicDaysOfWeek = mapOf(
+        1 to "إثنين",
+        2 to "ثلاثاء",
+        3 to "أربعاء",
+        4 to "خميس",
+        5 to "جمعة",
+        6 to "سبت",
+        7 to "أحد"
+    )
 
-    fun parseDateKey(dateKey: String): LocalDate {
+    fun toDateKey(date: LocalDate): String = date.format(DateTimeFormatter.ISO_LOCAL_DATE)
+
+    fun parseDateKey(dateKey: String, fallback: LocalDate = LocalDate.now()): LocalDate {
         return try {
             LocalDate.parse(dateKey, DateTimeFormatter.ISO_LOCAL_DATE)
-        } catch (e: Exception) {
-            LocalDate.now()
+        } catch (_: Exception) {
+            fallback
         }
     }
 
-    fun formatGregorianArabic(date: LocalDate): String {
-        val dayName = arabicDaysOfWeek[date.dayOfWeek.value] ?: ""
-        val day = toArabicDigits(date.dayOfMonth)
-        val month = gregorianMonths.getOrElse(date.monthValue - 1) { "" }
-        val year = toArabicDigits(date.year)
-        return "$dayName، $day $month $year م"
+    fun daysBetween(startDateKey: String, endDateKey: String): Long {
+        if (startDateKey.isBlank() || endDateKey.isBlank()) return 0L
+        return try {
+            val start = LocalDate.parse(startDateKey, DateTimeFormatter.ISO_LOCAL_DATE)
+            val end = LocalDate.parse(endDateKey, DateTimeFormatter.ISO_LOCAL_DATE)
+            ChronoUnit.DAYS.between(start, end)
+        } catch (_: Exception) {
+            0L
+        }
     }
 
-    /**
-     * Uses Java Time's Umm al-Qura HijrahChronology when available on Android runtime,
-     * with a standard Julian-Day Islamic calendar calculation fallback for headless JVM environments.
-     */
-    fun formatHijriArabic(date: LocalDate): String? {
+    fun formatGregorianArabic(date: LocalDate, useEasternArabicDigits: Boolean = false): String {
+        val dayName = arabicDaysOfWeek[date.dayOfWeek.value] ?: ""
+        val day = formatNumber(date.dayOfMonth, useEasternArabicDigits)
+        val month = gregorianMonths.getOrElse(date.monthValue - 1) { "" }
+        val year = formatNumber(date.year, useEasternArabicDigits)
+        return "$dayName $day $month $year"
+    }
+
+    fun formatMonthNameArabic(date: LocalDate): String {
+        return gregorianMonths.getOrElse(date.monthValue - 1) { "" }
+    }
+
+    fun formatShortDayNameArabic(date: LocalDate): String {
+        return shortArabicDaysOfWeek[date.dayOfWeek.value] ?: ""
+    }
+
+    fun formatHijriArabicWithSource(date: LocalDate, useEasternArabicDigits: Boolean = false): String? {
+        val raw = formatHijriArabic(date, useEasternArabicDigits) ?: return null
+        return "$raw (تقويم أم القرى)"
+    }
+
+    fun formatHijriArabic(date: LocalDate, useEasternArabicDigits: Boolean = false): String? {
         return try {
             val hijriDate: HijrahDate = HijrahChronology.INSTANCE.date(date)
-            val day = toArabicDigits(hijriDate.get(ChronoField.DAY_OF_MONTH))
+            val day = formatNumber(hijriDate.get(ChronoField.DAY_OF_MONTH), useEasternArabicDigits)
             val monthIndex = hijriDate.get(ChronoField.MONTH_OF_YEAR) - 1
             val monthName = hijriMonths.getOrElse(monthIndex) { "" }
-            val year = toArabicDigits(hijriDate.get(ChronoField.YEAR))
+            val year = formatNumber(hijriDate.get(ChronoField.YEAR), useEasternArabicDigits)
             if (monthName.isNotEmpty()) {
                 "$day $monthName $year هـ"
             } else {
-                computeTabularHijriArabic(date)
+                computeTabularHijriArabic(date, useEasternArabicDigits)
             }
-        } catch (e: Exception) {
-            computeTabularHijriArabic(date)
+        } catch (_: Exception) {
+            computeTabularHijriArabic(date, useEasternArabicDigits)
         }
     }
 
-    private fun computeTabularHijriArabic(date: LocalDate): String? {
+    private fun computeTabularHijriArabic(date: LocalDate, useEasternArabicDigits: Boolean): String? {
         return try {
             var y = date.year.toDouble()
             var m = date.monthValue.toDouble()
@@ -134,8 +147,8 @@ object ArabicDateUtils {
             val id = (z - floor(29.5001 * im - 29.0)).toInt().coerceIn(1, 30)
 
             val monthName = hijriMonths.getOrElse(im - 1) { hijriMonths[0] }
-            "${toArabicDigits(id)} $monthName ${toArabicDigits(iy)} هـ"
-        } catch (e: Exception) {
+            "${formatNumber(id, useEasternArabicDigits)} $monthName ${formatNumber(iy, useEasternArabicDigits)} هـ"
+        } catch (_: Exception) {
             null
         }
     }
@@ -148,7 +161,12 @@ object ArabicDateUtils {
         }
     }
 
-    fun toArabicDigits(number: Int): String {
+    fun recentDateWindow(anchorDate: LocalDate, count: Int = 7): List<LocalDate> {
+        return (count - 1 downTo 0).map { offset -> anchorDate.minusDays(offset.toLong()) }
+    }
+
+    fun formatNumber(number: Int, useEasternArabicDigits: Boolean = false): String {
+        if (!useEasternArabicDigits) return number.toString()
         val arabicDigits = charArrayOf('٠', '١', '٢', '٣', '٤', '٥', '٦', '٧', '٨', '٩')
         return number.toString().map { ch ->
             if (ch in '0'..'9') arabicDigits[ch - '0'] else ch

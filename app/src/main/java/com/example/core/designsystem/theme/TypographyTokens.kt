@@ -1,4 +1,4 @@
-package com.example.ui.theme
+package com.example.core.designsystem.theme
 
 import androidx.compose.material3.Typography
 import androidx.compose.ui.text.TextStyle
@@ -20,35 +20,35 @@ val AmiriFontFamily = FontFamily(
     Font(R.font.amiri, FontWeight.Bold)
 )
 
-val Typography = Typography(
+val WirdTypography = Typography(
     displayLarge = TextStyle(
         fontFamily = AmiriFontFamily,
         fontWeight = FontWeight.Bold,
-        fontSize = 44.sp,
-        lineHeight = 56.sp
+        fontSize = 40.sp,
+        lineHeight = 54.sp
     ),
     displayMedium = TextStyle(
         fontFamily = CairoFontFamily,
         fontWeight = FontWeight.Bold,
-        fontSize = 36.sp,
-        lineHeight = 46.sp
+        fontSize = 34.sp,
+        lineHeight = 44.sp
     ),
     headlineLarge = TextStyle(
-        fontFamily = AmiriFontFamily,
+        fontFamily = CairoFontFamily,
         fontWeight = FontWeight.Bold,
-        fontSize = 30.sp,
-        lineHeight = 40.sp
+        fontSize = 26.sp,
+        lineHeight = 36.sp
     ),
     headlineMedium = TextStyle(
         fontFamily = CairoFontFamily,
         fontWeight = FontWeight.Bold,
-        fontSize = 24.sp,
-        lineHeight = 34.sp
+        fontSize = 22.sp,
+        lineHeight = 32.sp
     ),
     headlineSmall = TextStyle(
         fontFamily = CairoFontFamily,
         fontWeight = FontWeight.SemiBold,
-        fontSize = 20.sp,
+        fontSize = 19.sp,
         lineHeight = 28.sp
     ),
     titleLarge = TextStyle(

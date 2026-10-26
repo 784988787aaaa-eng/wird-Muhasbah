@@ -4,12 +4,20 @@
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
+    <!-- Center Leaf (Forest Green #245B46) -->
     <path
-        android:fillColor="#00000000"
-        android:pathData="M54,26L74,34L82,54L74,74L54,82L34,74L26,54L34,34Z"
-        android:strokeWidth="2.5"
-        android:strokeColor="#FAE6DC" />
+        android:fillColor="#245B46"
+        android:pathData="M54,26 C61,36 62,48 54,60 C46,48 47,36 54,26 Z" />
+    <!-- Left Leaf (Sage Green #4CAF7F) -->
     <path
-        android:fillColor="#FFFFFDF9"
-        android:pathData="M48.5,61.5L39.5,52.5L36,56L48.5,68.5L72,45L68.5,41.5Z" />
+        android:fillColor="#4CAF7F"
+        android:pathData="M34,38 C45,40 51,48 52,60 C40,57 35,48 34,38 Z" />
+    <!-- Right Leaf (Sage Green #4CAF7F) -->
+    <path
+        android:fillColor="#4CAF7F"
+        android:pathData="M74,38 C63,40 57,48 56,60 C68,57 73,48 74,38 Z" />
+    <!-- Gentle Stem Base -->
+    <path
+        android:fillColor="#245B46"
+        android:pathData="M42,66 Q54,72 66,66 Q54,76 42,66 Z" />
 </vector>

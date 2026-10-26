@@ -12,24 +12,32 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
-import com.example.data.DarkModePreference
-import com.example.data.WirdDatabase
-import com.example.data.WirdRepository
-import com.example.ui.WirdHomeScreen
-import com.example.ui.WirdViewModel
-import com.example.ui.theme.WirdTheme
+import com.example.core.designsystem.theme.WirdTheme
+import com.example.data.local.datastore.DataStorePreferencesDataSource
+import com.example.data.local.db.WirdAppDatabase
+import com.example.data.repository.WirdDomainRepository
+import com.example.domain.model.ThemeModePreference
+import com.example.feature.main.WirdAppRoot
+import com.example.feature.main.WirdMainViewModel
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
 
-        val database = WirdDatabase.getInstance(applicationContext)
-        val repository = WirdRepository(database.wirdDao())
+        val database = WirdAppDatabase.getInstance(applicationContext)
+        val preferencesDataSource = DataStorePreferencesDataSource(applicationContext)
+        val repository = WirdDomainRepository(
+            dao = database.dao(),
+            preferencesDataSource = preferencesDataSource
+        )
 
         setContent {
-            val viewModel: WirdViewModel = viewModel(
-                factory = WirdViewModel.Factory(repository)
+            val viewModel: WirdMainViewModel = viewModel(
+                factory = WirdMainViewModel.Factory(
+                    repository = repository,
+                    preferencesDataSource = preferencesDataSource
+                )
             )
             val uiState by viewModel.uiState.collectAsStateWithLifecycle()
 
@@ -37,7 +45,7 @@ class MainActivity : ComponentActivity() {
             DisposableEffect(lifecycleOwner) {
                 val observer = LifecycleEventObserver { _, event ->
                     if (event == Lifecycle.Event.ON_RESUME) {
-                        viewModel.refreshToday()
+                        viewModel.refreshTodaySession()
                     }
                 }
                 lifecycleOwner.lifecycle.addObserver(observer)
@@ -47,48 +55,16 @@ class MainActivity : ComponentActivity() {
             }
 
             val systemDark = isSystemInDarkTheme()
-            val useDarkTheme = when (uiState.darkModeEnum) {
-                DarkModePreference.SYSTEM -> systemDark
-                DarkModePreference.DARK -> true
-                DarkModePreference.LIGHT -> false
+            val useDarkTheme = when (uiState.preferences.themeMode) {
+                ThemeModePreference.SYSTEM -> systemDark
+                ThemeModePreference.DARK -> true
+                ThemeModePreference.LIGHT -> false
             }
 
-            WirdTheme(
-                darkTheme = useDarkTheme,
-                genderGroup = uiState.genderGroupEnum,
-                ageGroup = uiState.ageGroupEnum
-            ) {
-                WirdHomeScreen(
+            WirdTheme(darkTheme = useDarkTheme) {
+                WirdAppRoot(
                     uiState = uiState,
-                    onToggleDailyItem = viewModel::onToggleDailyItem,
-                    onToggleFivePrayersExpanded = viewModel::onToggleFivePrayersExpanded,
-                    onToggleSinglePrayer = viewModel::onToggleSinglePrayer,
-                    onSetAllFivePrayers = viewModel::onSetAllFivePrayers,
-                    onCycleMotivation = viewModel::cycleMotivation,
-                    onFlashNotificationSent = viewModel::onFlashNotificationSent,
-                    onOpenCounter = viewModel::openCounter,
-                    onCloseCounter = viewModel::closeCounter,
-                    onIncrementCounter = viewModel::incrementCounter,
-                    onCycleCounterDhikr = viewModel::cycleCounterDhikr,
-                    onRequestResetCounter = viewModel::requestResetCounter,
-                    onConfirmResetCounter = viewModel::confirmResetCounter,
-                    onCancelResetCounter = viewModel::cancelResetCounter,
-                    onCycleAdhkar = viewModel::cycleSuggestedAdhkar,
-                    onSelectDhikr = viewModel::openDhikrReader,
-                    onCloseDhikrReader = viewModel::closeDhikrReader,
-                    onOpenCustomization = viewModel::openCustomization,
-                    onCloseCustomization = viewModel::closeCustomization,
-                    onOpenHistory = viewModel::openHistory,
-                    onCloseHistory = viewModel::closeHistory,
-                    onApplyPreset = viewModel::applyProfilePreset,
-                    onDismissOnboarding = viewModel::dismissInitialOnboarding,
-                    onToggleTemplateItem = viewModel::toggleTemplateItem,
-                    onMoveTemplateItem = viewModel::moveTemplateItem,
-                    onReorderTemplateItems = viewModel::reorderTemplateItems,
-                    onAddCustomDeed = viewModel::addCustomDeed,
-                    onDeleteCustomDeed = viewModel::deleteCustomDeed,
-                    onCycleDarkMode = viewModel::cycleDarkMode,
-                    onSetDarkMode = viewModel::setDarkModePreference
+                    viewModel = viewModel
                 )
             }
         }

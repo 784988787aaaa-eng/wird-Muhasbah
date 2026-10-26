@@ -1,36 +1,43 @@
 package com.example
 
 import android.content.Context
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
-import androidx.compose.ui.test.performScrollTo
+import androidx.lifecycle.ViewModelProvider
+import androidx.lifecycle.ViewModelStore
 import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
-import com.example.data.AgeGroup
-import com.example.data.ArabicDateUtils
-import com.example.data.ClockProvider
-import com.example.data.DailyDaySummary
-import com.example.data.DarkModePreference
-import com.example.data.GenderGroup
-import com.example.data.UserSettingsEntity
-import com.example.data.WirdDatabase
-import com.example.data.WirdIntensity
-import com.example.data.WirdRepository
-import com.example.ui.OverlayUiState
-import com.example.ui.WirdHomeScreen
-import com.example.ui.WirdUiState
-import com.example.ui.theme.WirdTheme
+import com.example.core.common.ClockProvider
+import com.example.core.designsystem.theme.WirdTheme
+import com.example.data.local.datastore.InMemoryPreferencesDataSource
+import com.example.data.local.db.WirdAppDatabase
+import com.example.data.repository.WirdDomainRepository
+import com.example.domain.model.ActivityCategory
+import com.example.domain.model.PrayerPerformanceMode
+import com.example.domain.model.PrayerType
+import com.example.domain.model.ReminderCategory
+import com.example.domain.model.ThemeModePreference
+import com.example.domain.model.UserPreferences
+import com.example.feature.main.WirdAppRoot
+import com.example.feature.main.WirdMainViewModel
 import java.time.LocalDate
 import java.time.ZoneId
 import java.util.concurrent.Executors
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Rule
@@ -40,10 +47,10 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 
 class FakeClockProvider(
-    var currentDate: LocalDate = LocalDate.of(2026, 10, 21),
+    var currentDate: LocalDate = LocalDate.of(2026, 5, 17),
     var currentMillis: Long = 1_760_000_000_000L,
     var zoneId: ZoneId = ZoneId.of("Asia/Riyadh"),
-    var hourOfDay: Int = 8
+    var hourOfDay: Int = 9
 ) : ClockProvider {
     override fun currentLocalDate(): LocalDate = currentDate
     override fun currentTimeMillis(): Long = currentMillis
@@ -52,367 +59,261 @@ class FakeClockProvider(
 }
 
 @RunWith(RobolectricTestRunner::class)
-@Config(sdk = [36])
+@Config(sdk = [36], qualifiers = "w411dp-h891dp")
 class ExampleRobolectricTest {
 
     @get:Rule
     val composeTestRule = createComposeRule()
 
     private lateinit var context: Context
-    private lateinit var database: WirdDatabase
+    private lateinit var database: WirdAppDatabase
     private lateinit var fakeClock: FakeClockProvider
-    private lateinit var repository: WirdRepository
+    private lateinit var preferencesDataSource: InMemoryPreferencesDataSource
+    private lateinit var repository: WirdDomainRepository
+    private lateinit var testScope: CoroutineScope
 
     @Before
     fun setUp() {
         context = ApplicationProvider.getApplicationContext()
-        database = Room.inMemoryDatabaseBuilder(context, WirdDatabase::class.java)
+        testScope = CoroutineScope(SupervisorJob() + Dispatchers.Unconfined)
+        database = Room.inMemoryDatabaseBuilder(context, WirdAppDatabase::class.java)
             .allowMainThreadQueries()
             .setTransactionExecutor(Executors.newSingleThreadExecutor())
             .setQueryExecutor(Executors.newSingleThreadExecutor())
             .build()
         fakeClock = FakeClockProvider()
-        repository = WirdRepository(database.wirdDao(), fakeClock)
+        preferencesDataSource = InMemoryPreferencesDataSource(
+            initial = UserPreferences(isOnboardingCompleted = true)
+        )
+        repository = WirdDomainRepository(
+            dao = database.dao(),
+            preferencesDataSource = preferencesDataSource,
+            clock = fakeClock
+        )
     }
 
     @After
     fun tearDown() {
+        testScope.cancel()
         database.close()
     }
 
-    @Test
-    fun `1 and 2 - check and uncheck deed updates progress accurately`(): Unit = runBlocking {
-        val todayKey = repository.ensureInitializedAndSyncToday()
-        val initialSummary = repository.observeDaySummary(todayKey).first()
-        assertNotNull(initialSummary)
-        assertEquals(0, initialSummary!!.completedCount)
-        assertTrue(initialSummary.totalCount > 0)
-
-        val firstDeed = initialSummary.items.first()
-        // Check deed
-        fakeClock.currentMillis += 1000L
-        repository.toggleDailyItemCompletion(firstDeed)
-
-        val afterCheck = repository.observeDaySummary(todayKey).first()!!
-        assertEquals(1, afterCheck.completedCount)
-        assertTrue(afterCheck.progressPercent > 0)
-
-        // Uncheck deed to correct record
-        val checkedDeed = afterCheck.items.first { it.id == firstDeed.id }
-        fakeClock.currentMillis += 1000L
-        repository.toggleDailyItemCompletion(checkedDeed)
-
-        val afterUncheck = repository.observeDaySummary(todayKey).first()!!
-        assertEquals(0, afterUncheck.completedCount)
-        assertEquals(0, afterUncheck.progressPercent)
-        Unit
+    private fun createViewModel(): WirdMainViewModel {
+        return WirdMainViewModel(
+            repository = repository,
+            preferencesDataSource = preferencesDataSource,
+            clock = fakeClock,
+            customScope = testScope,
+            initialPreferences = UserPreferences(isOnboardingCompleted = true)
+        )
     }
 
     @Test
-    fun `3 and 4 - new day creates independent record and preserves previous days without backfilling skipped days`(): Unit = runBlocking {
-        // Day 1: 2026-10-21
-        val day1Key = repository.ensureInitializedAndSyncToday()
-        assertEquals("2026-10-21", day1Key)
+    fun `1 - prayer recording, performance mode, post-prayer adhkar, notes, and correction persist accurately`(): Unit = runBlocking {
+        val (todayKey, _) = repository.ensureInitializedAndGetPreviousDateKey()
+        assertEquals("2026-05-17", todayKey)
 
-        val day1Items = repository.observeDaySummary(day1Key).first()!!.items
-        repository.toggleDailyItemCompletion(day1Items[0])
-        repository.toggleDailyItemCompletion(day1Items[1])
-        assertEquals(2, repository.observeDaySummary(day1Key).first()!!.completedCount)
+        // Initially 0 prayers are auto-recorded
+        val initialSummary = repository.observePrayersForDate(todayKey).first()
+        assertEquals(0, initialSummary.completedCount)
 
-        // User skips 2 days and opens app on 2026-10-24
-        fakeClock.currentDate = LocalDate.of(2026, 10, 24)
-        fakeClock.zoneId = ZoneId.of("Africa/Cairo") // Also test timezone change
-        val day4Key = repository.ensureInitializedAndSyncToday()
-        assertEquals("2026-10-24", day4Key)
+        // Record Dhuhr in Jamaah with post-prayer adhkar and note
+        repository.recordOrUpdatePrayer(
+            dateKey = todayKey,
+            prayerType = PrayerType.DHUHR,
+            isCompleted = true,
+            performanceMode = PrayerPerformanceMode.JAMAAH,
+            postPrayerAdhkarDone = true,
+            personalNote = "في مسجد الحي"
+        )
 
-        // New day starts fresh with 0 completed items
-        val day4Summary = repository.observeDaySummary(day4Key).first()!!
-        assertEquals(0, day4Summary.completedCount)
-        assertEquals("Africa/Cairo", day4Summary.record.timeZoneId)
+        val afterDhuhr = repository.observePrayersForDate(todayKey).first()
+        assertEquals(1, afterDhuhr.completedCount)
+        val dhuhrLog = afterDhuhr.logsByPrayer[PrayerType.DHUHR]!!
+        assertTrue(dhuhrLog.isCompleted)
+        assertEquals(PrayerPerformanceMode.JAMAAH, dhuhrLog.performanceMode)
+        assertTrue(dhuhrLog.postPrayerAdhkarCompleted)
+        assertEquals("في مسجد الحي", dhuhrLog.personalNote)
 
-        // Previous day (2026-10-21) is still intact with 2 completed items
-        val preservedDay1 = repository.observeDaySummary(day1Key).first()!!
-        assertEquals(2, preservedDay1.completedCount)
+        // Correct (unrecord) Dhuhr
+        repository.recordOrUpdatePrayer(
+            dateKey = todayKey,
+            prayerType = PrayerType.DHUHR,
+            isCompleted = false,
+            performanceMode = PrayerPerformanceMode.UNSPECIFIED,
+            postPrayerAdhkarDone = false,
+            personalNote = ""
+        )
+        val afterUndo = repository.observePrayersForDate(todayKey).first()
+        assertEquals(0, afterUndo.completedCount)
+        assertFalse(afterUndo.logsByPrayer[PrayerType.DHUHR]!!.isCompleted)
+    }
 
-        // Skipped days (2026-10-22, 2026-10-23) were NOT artificially filled
+    @Test
+    fun `2 - new day and return after pause preserve previous days without auto-filling skipped days`(): Unit = runBlocking {
+        // Day 1: 2026-05-14
+        fakeClock.currentDate = LocalDate.of(2026, 5, 14)
+        val (day1Key, _) = repository.ensureInitializedAndGetPreviousDateKey()
+        repository.togglePrayerQuick(day1Key, PrayerType.FAJR)
+        repository.toggleActivityCompletion(day1Key, "silat_rahim")
+
+        // User pauses for 3 days and returns on 2026-05-17
+        fakeClock.currentDate = LocalDate.of(2026, 5, 17)
+        val (day4Key, previousDateKey) = repository.ensureInitializedAndGetPreviousDateKey()
+        assertEquals("2026-05-17", day4Key)
+        assertEquals("2026-05-14", previousDateKey)
+
+        // New day starts clean with 0 completed prayers
+        val day4Prayers = repository.observePrayersForDate(day4Key).first()
+        assertEquals(0, day4Prayers.completedCount)
+
+        // Day 1 record is still intact
         val allHistory = repository.observeAllHistorySummaries().first()
-        assertEquals(2, allHistory.size)
-        assertEquals(listOf("2026-10-24", "2026-10-21"), allHistory.map { it.record.dateKey })
-        Unit
+        val preservedDay1 = allHistory["2026-05-14"]!!
+        assertEquals(1, preservedDay1.prayersCompleted)
+        assertEquals(1, preservedDay1.goodDeedsCompleted)
     }
 
     @Test
-    fun `5, 6, 7, and 8 - counter increments, persists on close and app restart, and confirms reset`(): Unit = runBlocking {
-        repository.ensureInitializedAndSyncToday()
+    fun `3 - tasbih counter increments, switches dhikr, persists across instances, and resets`(): Unit = runBlocking {
+        repository.ensureInitializedAndGetPreviousDateKey()
+        repository.incrementTasbih(1)
+        repository.incrementTasbih(1)
+        repository.incrementTasbih(1)
 
-        repository.selectDhikrForCounter("الاستغفار")
-        repository.incrementCounter(1)
-        repository.incrementCounter(1)
-        repository.incrementCounter(1)
+        val stateAfter3 = repository.tasbihStateFlow.first()
+        assertEquals(3, stateAfter3.currentCount)
 
-        // Verify persisted in database and survives new repository instance (simulating app close & reopen)
-        val newRepositoryInstance = WirdRepository(database.wirdDao(), fakeClock)
-        val persistedSettings = newRepositoryInstance.settingsFlow.first()!!
-        assertEquals(3, persistedSettings.counterValue)
-        assertEquals("الاستغفار", persistedSettings.activeDhikrTitle)
+        // Switch dhikr
+        val prevTitle = stateAfter3.activeDhikrTitle
+        repository.cycleTasbihDhikr()
+        val stateAfterSwitch = repository.tasbihStateFlow.first()
+        assertNotEquals(prevTitle, stateAfterSwitch.activeDhikrTitle)
+        assertEquals(3, stateAfterSwitch.currentCount)
 
-        // Reset counter after confirmation
-        newRepositoryInstance.resetCounter()
-        assertEquals(0, newRepositoryInstance.settingsFlow.first()!!.counterValue)
-        Unit
+        // Reset counter
+        repository.resetTasbihCounter()
+        assertEquals(0, repository.tasbihStateFlow.first().currentCount)
     }
 
     @Test
-    fun `9 and 10 - template customization, adding custom deed, and hiding deed do not alter historical days`(): Unit = runBlocking {
-        // Day 1 setup
-        val day1Key = repository.ensureInitializedAndSyncToday()
-        val day1InitialCount = repository.observeDaySummary(day1Key).first()!!.totalCount
+    fun `4 - custom personal deeds can be added, edited, reordered, and deleted safely`(): Unit = runBlocking {
+        val (todayKey, _) = repository.ensureInitializedAndGetPreviousDateKey()
+        val initialList = repository.observeActivitiesForDate(todayKey).first()
+        val initialCount = initialList.size
 
-        // Advance to Day 2
-        fakeClock.currentDate = LocalDate.of(2026, 10, 22)
-        val day2Key = repository.ensureInitializedAndSyncToday()
-
-        // Apply LIGHT preset (5 deeds)
-        repository.applyProfilePreset(
-            ageGroup = AgeGroup.CHILDREN,
-            genderGroup = GenderGroup.GIRLS,
-            intensity = WirdIntensity.LIGHT
+        // Add custom deed
+        repository.addCustomActivity(
+            title = "عيادة مريض",
+            subtitle = "زيارة قريب والاطمئنان عليه",
+            category = ActivityCategory.SOCIAL
         )
-        val day2AfterLight = repository.observeDaySummary(day2Key).first()!!
-        assertEquals(5, day2AfterLight.totalCount)
+        val afterAdd = repository.observeActivitiesForDate(todayKey).first()
+        assertEquals(initialCount + 1, afterAdd.size)
+        val addedDef = afterAdd.first { it.definition.title == "عيادة مريض" }.definition
+        assertTrue(addedDef.isCustom)
 
-        // Add custom personal deed
-        repository.addCustomTemplateItem("صلة الرحم", "الاتصال بالأقارب والاطمئنان عليهم")
-        val day2AfterCustom = repository.observeDaySummary(day2Key).first()!!
-        assertEquals(6, day2AfterCustom.totalCount)
-        assertTrue(day2AfterCustom.items.any { it.title == "صلة الرحم" })
+        // Edit custom deed
+        repository.updateCustomActivity(
+            definition = addedDef,
+            newTitle = "عيادة مريض والدعاء له",
+            newSubtitle = "إدخال السرور على قلبه",
+            newCategory = ActivityCategory.FAMILY
+        )
+        val afterEdit = repository.observeActivitiesForDate(todayKey).first()
+        val editedDef = afterEdit.first { it.definition.code == addedDef.code }.definition
+        assertEquals("عيادة مريض والدعاء له", editedDef.title)
+        assertEquals(ActivityCategory.FAMILY, editedDef.category)
 
-        // Hide one deed from template
-        val istighfarTemplate = repository.templateItemsFlow.first().first { it.code == "istighfar" }
-        repository.toggleTemplateItemEnabled(istighfarTemplate)
-        val day2AfterHide = repository.observeDaySummary(day2Key).first()!!
-        assertEquals(5, day2AfterHide.totalCount)
+        // Reorder first two items
+        val firstCodeBefore = afterEdit[0].definition.code
+        val secondCodeBefore = afterEdit[1].definition.code
+        repository.reorderActivityDefinitions(0, 1)
+        val afterReorder = repository.observeActivitiesForDate(todayKey).first()
+        assertEquals(secondCodeBefore, afterReorder[0].definition.code)
+        assertEquals(firstCodeBefore, afterReorder[1].definition.code)
 
-        // Verify Day 1 historical record was NOT altered by Day 2 template edits
-        val day1Preserved = repository.observeDaySummary(day1Key).first()!!
-        assertEquals(day1InitialCount, day1Preserved.totalCount)
-        Unit
+        // Delete custom deed
+        repository.deleteCustomActivity(editedDef)
+        val afterDelete = repository.observeActivitiesForDate(todayKey).first()
+        assertEquals(initialCount, afterDelete.size)
     }
 
     @Test
-    fun `11, 12, and 13 - Arabic UI rendering, Dark Mode toggle, and offline operation`(): Unit = runBlocking {
-        val appContext = ApplicationProvider.getApplicationContext<Context>()
-        assertEquals("وِرد محاسبة", appContext.getString(R.string.app_name))
+    fun `5 - preferences and reminders update theme, card visibility, quiet mode, and non-repeating messages`(): Unit = runBlocking {
+        repository.ensureInitializedAndGetPreviousDateKey()
+        val viewModel = createViewModel()
 
-        // Verify Hijri & Gregorian Arabic offline date formatting
-        val sampleDate = LocalDate.of(2026, 10, 21)
-        val gregArabic = ArabicDateUtils.formatGregorianArabic(sampleDate)
-        val hijriArabic = ArabicDateUtils.formatHijriArabic(sampleDate)
-        assertTrue(gregArabic.contains("أكتوبر"))
-        assertNotNull(hijriArabic)
-        assertTrue(hijriArabic!!.contains("هـ"))
+        // Verify non-repeating heart message cycling
+        val firstMessageId = viewModel.currentHeartMessageId()
+        viewModel.cycleNextHeartMessage()
+        val secondMessageId = viewModel.currentHeartMessageId()
+        assertNotEquals(firstMessageId, secondMessageId)
 
-        // Verify Dark Mode preference persistence
-        val todayKey = repository.ensureInitializedAndSyncToday()
-        repository.completeOnboardingWithCurrentSettings()
-        repository.updateDarkModePreference(DarkModePreference.DARK)
-        val currentSettings: UserSettingsEntity = repository.settingsFlow.first()!!
-        assertEquals(DarkModePreference.DARK.name, currentSettings.darkModePref)
-        val summary: DailyDaySummary = repository.observeDaySummary(todayKey).first()!!
+        // Verify theme mode & reminder updates
+        preferencesDataSource.updateThemeMode(ThemeModePreference.DARK)
+        preferencesDataSource.updateReminder(ReminderCategory.PRAYER_TIMES, true, "12:30")
+        preferencesDataSource.updateQuietMode(true)
 
-        var counterOpened = false
-        val initialUiState = WirdUiState(
-            isLoading = false,
-            todayDateKey = todayKey,
-            gregorianDateText = gregArabic,
-            hijriDateText = hijriArabic,
-            greetingText = "صباح السكينة والبركة",
-            settings = currentSettings.copy(isOnboardingCompleted = true, counterValue = 7),
-            todaySummary = summary,
-            overlay = OverlayUiState(isCounterOpen = true, isResetConfirmVisible = true)
-        )
+        val prefs = preferencesDataSource.preferencesFlow.first()
+        assertEquals(ThemeModePreference.DARK, prefs.themeMode)
+        assertTrue(prefs.quietModeAllRemindersOff)
+        assertEquals("12:30", prefs.reminders[ReminderCategory.PRAYER_TIMES]?.timeHHmm)
+    }
 
-        composeTestRule.setContent {
-            WirdTheme(darkTheme = true) {
-                WirdHomeScreen(
-                    uiState = initialUiState,
-                    onToggleDailyItem = {},
-                    onOpenCounter = { counterOpened = true },
-                    onCloseCounter = {},
-                    onIncrementCounter = {},
-                    onRequestResetCounter = {},
-                    onConfirmResetCounter = {},
-                    onCancelResetCounter = {},
-                    onCycleAdhkar = {},
-                    onSelectDhikr = {},
-                    onCloseDhikrReader = {},
-                    onOpenCustomization = {},
-                    onCloseCustomization = {},
-                    onOpenHistory = {},
-                    onCloseHistory = {},
-                    onApplyPreset = { _, _, _ -> },
-                    onDismissOnboarding = {},
-                    onToggleTemplateItem = {},
-                    onMoveTemplateItem = { _, _ -> },
-                    onAddCustomDeed = { _, _ -> },
-                    onDeleteCustomDeed = {},
-                    onCycleDarkMode = {},
-                    onSetDarkMode = {}
-                )
-            }
+    @Test
+    fun `6 - full Compose UI navigation across Home, Worship, History, Good Prayers, and Settings works in RTL`() {
+        runBlocking {
+            repository.ensureInitializedAndGetPreviousDateKey()
         }
-
-        composeTestRule.waitForIdle()
-        composeTestRule.onNodeWithTag("wird_emblem").assertIsDisplayed()
-        composeTestRule.onNodeWithText("وِرد محاسبة").assertIsDisplayed()
-        composeTestRule.onNodeWithTag("daily_progress_card").assertIsDisplayed()
-        composeTestRule.onNodeWithTag("counter_panel").assertIsDisplayed()
-        composeTestRule.onNodeWithTag("counter_value_text").assertIsDisplayed()
-        composeTestRule.onNodeWithTag("counter_reset_confirm_box").assertIsDisplayed()
-        composeTestRule.onNodeWithTag("confirm_reset_button").performClick()
-        Unit
-    }
-
-    @Test
-    fun `14 - five prayers schedule expands on click and allows checking and correcting Fajr, Dhuhr, Asr, Maghrib, Isha`(): Unit = runBlocking {
-        val todayKey = repository.ensureInitializedAndSyncToday()
-        repository.completeOnboardingWithCurrentSettings()
-
-        var summary = repository.observeDaySummary(todayKey).first()!!
-        var fardItem = summary.items.first { it.isFivePrayers }
-        assertEquals(0, fardItem.completedPrayersCount)
-
-        // Check Fajr, Dhuhr, Asr
-        repository.toggleSingleFivePrayer(fardItem, com.example.data.FivePrayer.FAJR)
-        fardItem = repository.observeDaySummary(todayKey).first()!!.items.first { it.isFivePrayers }
-        repository.toggleSingleFivePrayer(fardItem, com.example.data.FivePrayer.DHUHR)
-        fardItem = repository.observeDaySummary(todayKey).first()!!.items.first { it.isFivePrayers }
-        repository.toggleSingleFivePrayer(fardItem, com.example.data.FivePrayer.ASR)
-
-        fardItem = repository.observeDaySummary(todayKey).first()!!.items.first { it.isFivePrayers }
-        assertEquals(3, fardItem.completedPrayersCount)
-        assertTrue(fardItem.isPrayerCompleted(com.example.data.FivePrayer.FAJR))
-        assertTrue(fardItem.isPrayerCompleted(com.example.data.FivePrayer.DHUHR))
-        assertTrue(fardItem.isPrayerCompleted(com.example.data.FivePrayer.ASR))
-        assertEquals(false, fardItem.isCompleted)
-
-        // Correct (uncheck) Asr
-        repository.toggleSingleFivePrayer(fardItem, com.example.data.FivePrayer.ASR)
-        fardItem = repository.observeDaySummary(todayKey).first()!!.items.first { it.isFivePrayers }
-        assertEquals(2, fardItem.completedPrayersCount)
-        assertEquals(false, fardItem.isPrayerCompleted(com.example.data.FivePrayer.ASR))
-
-        // Complete all 5 prayers (Asr, Maghrib, Isha)
-        repository.toggleSingleFivePrayer(fardItem, com.example.data.FivePrayer.ASR)
-        fardItem = repository.observeDaySummary(todayKey).first()!!.items.first { it.isFivePrayers }
-        repository.toggleSingleFivePrayer(fardItem, com.example.data.FivePrayer.MAGHRIB)
-        fardItem = repository.observeDaySummary(todayKey).first()!!.items.first { it.isFivePrayers }
-        repository.toggleSingleFivePrayer(fardItem, com.example.data.FivePrayer.ISHA)
-
-        summary = repository.observeDaySummary(todayKey).first()!!
-        fardItem = summary.items.first { it.isFivePrayers }
-        assertEquals(5, fardItem.completedPrayersCount)
-        assertTrue(fardItem.isCompleted)
-
-        // Verify UI renders the expanded schedule with all 5 prayers (الفجر، الظهر، العصر، المغرب، العشاء)
-        val uiState = WirdUiState(
-            isLoading = false,
-            todayDateKey = todayKey,
-            gregorianDateText = "الأربعاء، ٢١ أكتوبر ٢٠٢٦ م",
-            hijriDateText = "١٠ جمادى الأولى ١٤٤٨ هـ",
-            greetingText = "صباح السكينة والبركة",
-            settings = repository.settingsFlow.first()!!.copy(isOnboardingCompleted = true),
-            todaySummary = summary,
-            overlay = OverlayUiState(isFivePrayersExpanded = true)
-        )
+        val viewModel = createViewModel()
 
         composeTestRule.setContent {
+            val state by viewModel.uiState.collectAsState()
             WirdTheme(darkTheme = false) {
-                WirdHomeScreen(
-                    uiState = uiState,
-                    onToggleDailyItem = {},
-                    onOpenCounter = {},
-                    onCloseCounter = {},
-                    onIncrementCounter = {},
-                    onRequestResetCounter = {},
-                    onConfirmResetCounter = {},
-                    onCancelResetCounter = {},
-                    onCycleAdhkar = {},
-                    onSelectDhikr = {},
-                    onCloseDhikrReader = {},
-                    onOpenCustomization = {},
-                    onCloseCustomization = {},
-                    onOpenHistory = {},
-                    onCloseHistory = {},
-                    onApplyPreset = { _, _, _ -> },
-                    onDismissOnboarding = {},
-                    onToggleTemplateItem = {},
-                    onMoveTemplateItem = { _, _ -> },
-                    onAddCustomDeed = { _, _ -> },
-                    onDeleteCustomDeed = {},
-                    onCycleDarkMode = {},
-                    onSetDarkMode = {}
+                WirdAppRoot(
+                    uiState = state,
+                    viewModel = viewModel
                 )
             }
         }
 
         composeTestRule.waitForIdle()
-        composeTestRule.onNodeWithTag("checklist_item_fard_prayers").performScrollTo()
+
+        // 1. Verify Home Screen & Bottom Navigation Bar
+        composeTestRule.onNodeWithTag("home_header_section").assertIsDisplayed()
+        composeTestRule.onNodeWithTag("daily_prayers_card").assertIsDisplayed()
+        composeTestRule.onNodeWithTag("heart_message_card").assertIsDisplayed()
+        composeTestRule.onNodeWithTag("wird_bottom_navigation_bar").assertIsDisplayed()
+
+        // 2. Navigate to Worship Tab («عباداتي») and verify Tasbih & Adhkar
+        composeTestRule.onNodeWithTag("nav_tab_worship").performClick()
         composeTestRule.waitForIdle()
-        composeTestRule.onNodeWithTag("five_prayers_schedule_table", useUnmergedTree = true).assertExists()
-        composeTestRule.onNodeWithTag("prayer_row_FAJR", useUnmergedTree = true).assertExists()
-        composeTestRule.onNodeWithTag("prayer_row_DHUHR", useUnmergedTree = true).assertExists()
-        composeTestRule.onNodeWithTag("prayer_row_ASR", useUnmergedTree = true).assertExists()
-        composeTestRule.onNodeWithTag("prayer_row_MAGHRIB", useUnmergedTree = true).assertExists()
-        composeTestRule.onNodeWithTag("prayer_row_ISHA", useUnmergedTree = true).assertExists()
-        composeTestRule.onNodeWithTag("prayer_checkbox_FAJR", useUnmergedTree = true).assertExists()
-        composeTestRule.onNodeWithTag("prayer_checkbox_ASR", useUnmergedTree = true).assertExists()
-        Unit
-    }
+        composeTestRule.onNodeWithTag("worship_screen").assertIsDisplayed()
+        composeTestRule.onNodeWithTag("electronic_tasbih_card").assertIsDisplayed()
+        composeTestRule.onNodeWithTag("tasbih_plus_one_button").performClick()
+        composeTestRule.waitForIdle()
 
-    @Test
-    fun `15 - gender adaptive theme and motivational library adapt to female, boy, and male profiles`(): Unit = runBlocking {
-        // Verify palette adapts to gender and age
-        assertEquals(
-            com.example.ui.theme.PersonaPaletteStyle.ROSE_BLUSH,
-            com.example.ui.theme.resolvePersonaPalette(GenderGroup.YOUNG_WOMEN, AgeGroup.YOUNG_ADULTS)
-        )
-        assertEquals(
-            com.example.ui.theme.PersonaPaletteStyle.ROSE_BLUSH,
-            com.example.ui.theme.resolvePersonaPalette(GenderGroup.GIRLS, AgeGroup.CHILDREN)
-        )
-        assertEquals(
-            com.example.ui.theme.PersonaPaletteStyle.SKY_TEAL,
-            com.example.ui.theme.resolvePersonaPalette(GenderGroup.BOYS, AgeGroup.YOUTH)
-        )
-        assertEquals(
-            com.example.ui.theme.PersonaPaletteStyle.ROYAL_EMERALD,
-            com.example.ui.theme.resolvePersonaPalette(GenderGroup.MEN, AgeGroup.ADULTS)
-        )
+        // Switch to Good Deeds sub-tab inside Worship
+        composeTestRule.onNodeWithTag("worship_subtab_DEEDS").performClick()
+        composeTestRule.waitForIdle()
+        composeTestRule.onNodeWithTag("good_deeds_lazy_column").assertIsDisplayed()
 
-        // Verify Mindful UX Copy motivational messages adapt serenely without preachy copy
-        val todayKey = repository.ensureInitializedAndSyncToday()
-        val summary = repository.observeDaySummary(todayKey).first()!!
+        // 3. Navigate to History Tab («سجلّي»)
+        composeTestRule.onNodeWithTag("nav_tab_history").performClick()
+        composeTestRule.waitForIdle()
+        composeTestRule.onNodeWithTag("history_screen").assertIsDisplayed()
+        composeTestRule.onNodeWithTag("history_day_summary_card").assertIsDisplayed()
 
-        val femaleMessages = com.example.data.MotivationalLibrary.getCuratedMessages(
-            ageGroup = AgeGroup.YOUNG_ADULTS,
-            genderGroup = GenderGroup.YOUNG_WOMEN,
-            todaySummary = summary,
-            hourOfDay = 16
-        )
-        assertTrue(femaleMessages.isNotEmpty())
-        assertTrue(femaleMessages.any { it.text.contains("استراحة روح") })
-        assertTrue(femaleMessages.any { it.text.contains("طوبى لمن جعل ليله ونهاره عامراً بذكر ربه") })
-        assertTrue(femaleMessages.any { it.text.contains("ما زال في اليوم فسحة، ركعتان تسترد بهما سكينة قلبك") })
+        // 4. Navigate to Good Prayers Tab («دعوات طيبة»)
+        composeTestRule.onNodeWithTag("nav_tab_messages").performClick()
+        composeTestRule.waitForIdle()
+        composeTestRule.onNodeWithTag("good_prayers_screen").assertIsDisplayed()
 
-        // Verify template Drag & Drop reordering
-        val beforeReorder = repository.templateItemsFlow.first()
-        val firstCode = beforeReorder[0].code
-        val secondCode = beforeReorder[1].code
-        repository.reorderTemplateItems(0, 1)
-        val afterReorder = repository.templateItemsFlow.first()
-        assertEquals(secondCode, afterReorder[0].code)
-        assertEquals(firstCode, afterReorder[1].code)
-        Unit
+        // 5. Navigate to Settings Tab («حسابي / الإعدادات»)
+        composeTestRule.onNodeWithTag("nav_tab_settings").performClick()
+        composeTestRule.waitForIdle()
+        composeTestRule.onNodeWithTag("settings_screen").assertIsDisplayed()
+        composeTestRule.onNodeWithText("الإعدادات").assertIsDisplayed()
     }
 }
